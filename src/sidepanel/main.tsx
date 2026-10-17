@@ -158,6 +158,10 @@ const fieldHints: Record<string, string> = {
     "Jeden wzorzec w linii, np. *://www.googletagmanager.com/* lub analytics.example.com. Blokuj tylko elementy nieistotne dla scenariusza — blokada fontów/API fałszuje wynik.",
   "Blocked URL patterns":
     "One pattern per line, e.g. *://www.googletagmanager.com/* or analytics.example.com. Block only scenario-irrelevant resources; blocking fonts or APIs distorts results.",
+  Interakcje:
+    "INP może powstać tylko po kliknięciu, tapnięciu lub interakcji klawiaturą. Dodaj co najmniej jedno kliknięcie; kroki wait i scroll nie tworzą INP. Test Chrome / CWV na chwilę otworzy kartę testową na pierwszym planie, ponieważ Chrome nie raportuje CWV dla dokumentu w tle.",
+  Interactions:
+    "INP requires a click, tap, or keyboard interaction. Add at least one click; wait and scroll steps do not create INP. Chrome / CWV briefly foregrounds its test tab because Chrome does not report CWV for a background document.",
   "Interwał między runami (ms)":
     "Przerwa w milisekundach po każdym runie; domyślnie 1500. Dozwolone ≥ 0; np. 3000 zmniejsza ryzyko rate-limitów i chwilowego przeciążenia.",
   "Interval between runs (ms)":
@@ -1119,7 +1123,10 @@ function App() {
               </div>
             </fieldset>
             <fieldset>
-              <legend>{t.actions}</legend>
+              <legend>
+                {t.actions}
+                <HelpIcon hint={fieldHints[t.actions]} />
+              </legend>
               {profile.actions.map((action, index) => (
                 <div className="action" key={index}>
                   {action.type === "click" ? (
