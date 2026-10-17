@@ -32,3 +32,11 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## Przygotowanie pakietu lokalnego
+
+```bash
+npm run release:prepare
+```
+
+Polecenie tworzy przenośny katalog `release/deploy-speed-tester-<wersja>/` zawierający zbudowane rozszerzenie i companion. Jest przeznaczony dla macOS, Windows i Linux; podpisanie instalatora lub paczki wymaga osobnych certyfikatów wydawcy.

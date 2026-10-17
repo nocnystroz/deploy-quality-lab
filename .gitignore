@@ -1,5 +1,6 @@
 node_modules/
 dist/
+release/
 companion/node_modules/
 companion/com.deploy_speed_tester.host.json
 companion/launch-host.sh
