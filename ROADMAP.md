@@ -1,56 +1,56 @@
-# Deploy Speed Tester — roadmap
+# Deploy Quality Lab — roadmap i stan wdrożenia
 
 ## Cel
 
-Lokalne rozszerzenie Chrome dla developerów, które porównuje wydajność instancji testowej przed i po deployu. Nie korzysta z SaaS ani nie wysyła danych na zewnątrz. Wyniki przetrwają restart przeglądarki i można je usunąć pojedynczo albo wyczyścić zbiorczo.
+Lokalne rozszerzenie Chrome do powtarzalnego porównywania jakości wdrożenia przed i po zmianie. Dane, pomiary, HAR-y i konfiguracje pozostają w przeglądarce użytkownika. Instalacja wymaga wyłącznie rozszerzenia — bez SaaS, companion application, Native Messaging, serwera lokalnego, CLI ani dodatkowego silnika.
 
-## Zasady produktu
+## Wdrożone
 
-- UI działa jako prawy Chrome Side Panel, z trybem debug, stopką i odnośnikiem „Buy me a coffee”.
-- Interfejs jest od początku dostępny po polsku i angielsku; teksty nie są rozproszone po komponentach.
-- Seria ma etykietę `before`, `after` lub własną; można ją porównać z wcześniej zapisanym baseline albo z drugą serią z bieżącej sesji.
-- Profil definiuje URL-e, liczbę runów, medianę/P75/P90, własny User-Agent, wyłączenie cache, wzorce zablokowanych adresów, progi i opcjonalne emulowanie CPU/sieci.
-- Automatyzacja v1 obejmuje klik CSS, oczekiwanie i scroll — np. akceptację cookies oraz zamykanie popupów. Nie zapisuje haseł ani nie automatyzuje logowania.
+### Pomiary wydajności
 
-## Architektura
+- Profile wielu URL-i, etykiety „przed zmianą”, „po zmianie” i własne etykiety.
+- Dowolna liczba runów, warm-upy, mediana, P75 albo P90.
+- Dwa lokalne silniki: pełne ładowanie Chrome z CWV oraz HTTP request (fetch).
+- TTFB, total time, DOMContentLoaded, load, FCP, LCP, CLS, INP, transfer i status HTTP, zależnie od silnika.
+- Porównanie z baseline, procentowe delty oraz delta czasu po odjęciu TTFB.
+- Konfigurowalne progi total time, TTFB, LCP i regresji.
+- Cache off, User-Agent, blokady URL, viewport/DPR/mobile, CPU/network throttling, timeout i interwał między próbami (domyślnie 1500 ms).
+- Interakcje: klik CSS, oczekiwanie i scroll; walidacja selektorów na aktywnej karcie.
 
-Rozszerzenie Manifest V3 wykonuje testy pełnego ładowania przez Chrome DevTools Protocol oraz pojedyncze requesty HTTP przez wbudowane `fetch`. Zbiera czas nawigacji, TTFB, FCP, transfer, status, HAR oraz trace możliwy do otwarcia w Chrome DevTools. Artefakty pozostają wyłącznie dla medianowego runu, aby ograniczać rozmiar historii.
+### Diagnostyka i artefakty
 
-Lighthouse pozostaje opcjonalnym, ręcznym auditem uruchamianym w Chrome DevTools. Projekt nie wymaga companion application ani Native Messaging.
+- HAR oraz trace Chrome DevTools dla medianowego runu; log debug w trybie debug.
+- Waterfall z filtrowaniem URL/domen, filtrem statusu HTTP i sortowaniem po czasie lub transferze.
+- Eksport serii: CSV, HTML, HAR, trace i log debug.
+- Eksport historii wybranych wskaźników: CSV, XLSX, HTML z wykresami i PDF. XLSX jest generowany lokalnie, bez podatnej zależności SheetJS.
+- Lighthouse nie jest automatyzowany: interfejs prowadzi do ręcznego uruchomienia w Chrome DevTools → Lighthouse.
 
-## Smoke tests i diagnostyka sieci
+### Smoke tests
 
-- Trwałe, lokalne suite’y smoke: URL bazowy, przypadki ze statusem HTTP, widocznym tekstem, selektorem CSS i krokami interakcji.
-- Błędy smoke zachowują HAR, trace DevTools i screenshot; sukcesy pozostają lekkie.
-- Waterfall sieci pokazuje żądania, transfer, statusy i najwolniejsze zasoby dla medianowego runu oraz błędów smoke.
+- Trwale zapisane lokalnie suite’y: URL bazowy, blokady zasobów, scenariusze, status HTTP, widoczny tekst, selektor CSS i akcje.
+- Edycja, usuwanie, import oraz eksport suite’ów JSON.
+- Artefakty przy błędzie: HAR, trace i screenshot.
+- Wykrywanie best-effort React/Next.js w wyniku oraz presety sprawdzające standardowe kontenery #root i #__next.
 
-## Etapy
+### Ergonomia i dane
 
-### 0.1 — działający MVP
+- IndexedDB dla profili, serii, suite’ów i historii smoke; kasowanie pojedyncze, zbiorcze oraz retencja serii.
+- Profile można zapisywać, duplikować oraz importować/eksportować jako JSON.
+- Polski i angielski UI, podpowiedzi dla pól, disclaimer bezpieczeństwa, stopka z debug mode i linkiem „Buy me a coffee”.
+- Domyślne dokowanie po prawej oraz otwieranie panelu w osobnym oknie.
+- Nazwa produktu: Deploy Quality Lab; ikona rozszerzenia; wersja manifestu jest synchronizowana z liczbą commitów.
 
-- Profile, serie, trwały IndexedDB storage i porównanie wyników.
-- Browser engine z cache/UA/blokadami, krokami interakcji, HAR i trace.
-- HTTP request engine przez `fetch` oraz eksport CSV, HTML, HAR i trace.
-- Progi dla total time, TTFB, LCP i dopuszczalnej regresji procentowej.
-- Testy jednostkowe agregacji i progów oraz instrukcja lokalnej instalacji.
+## Świadome granice
 
-### 0.2 — wiarygodność metryk
+- Nie ma automatyzacji logowania i nie należy umieszczać w suite’ach haseł ani danych produkcyjnych.
+- Rozszerzenie mierzy z lokalnej maszyny i bieżącego Chrome. Nie zastępuje testów obciążeniowych z wielu lokalizacji ani RUM.
+- Wykrywanie frameworka jest informacyjne — produkcyjne aplikacje mogą ukrywać znaczniki React/Next.js.
+- Lighthouse pozostaje ręczny, ponieważ automatyczny audyt wymagałby dodatkowego procesu albo nieobsługiwanej automatyzacji.
 
-- Pomiar LCP, CLS i INP przez obserwatory instalowane przed nawigacją.
-- Konfigurowalne urządzenie, viewport, throttling i warm-up runy.
-- Czytelny widok rozrzutu, różnic i błędów poszczególnych runów.
-- Walidacja selektorów scenariusza oraz podgląd wykonywanych kroków.
+## Kontrola odbiorowa
 
-### 0.3 — ergonomia zespołowa
-
-- Import/eksport profili JSON, duplikowanie profilu i wersjonowanie konfiguracji.
-- Raport porównawczy wielu URL-i, filtrowanie historii i retencja artefaktów.
-- Przenośny bundle rozszerzenia dla trzech systemów.
-
-## Kryteria akceptacji
-
-1. Pięć runów strony z wyłączonym cache zwraca medianę i zapisuje wynik po restarcie Chrome.
-2. Seria `after` wskazuje zmianę względem `before` i oznacza przekroczony próg.
-3. Cookie banner może zostać kliknięty, a wzorzec URL zablokowany podczas testu przeglądarkowego.
-4. Eksportuje się poprawny HAR medianowego runu, trace DevTools, CSV i raport HTML.
-5. Rozszerzenie działa po instalacji bez dodatkowego procesu lokalnego.
+1. Zainstaluj katalog dist/ jako unpacked extension w Chrome.
+2. Utwórz profil z pięcioma runami, cache off i interwałem 1500 ms; zapisz serię „Przed zmianą”.
+3. Po deployu uruchom serię „Po zmianie”, wskaż baseline i sprawdź delty total/TTFB/„Po TTFB”.
+4. Pobierz HAR, trace i wybrany eksport historii.
+5. Utwórz smoke suite lub preset React/Next.js, uruchom go i sprawdź zapis wyniku po restarcie Chrome.
