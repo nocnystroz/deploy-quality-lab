@@ -93,7 +93,7 @@ export async function runBrowser(profile: TestProfile, url: string, index: numbe
     if (profile.userAgent) await send(target, 'Network.setUserAgentOverride', { userAgent: profile.userAgent });
     const blockedPatterns = blockedUrlPatterns(profile.blockedPatterns);
     if (blockedPatterns.length) await send(target, 'Network.setBlockedURLs', { urls: blockedPatterns });
-    if (profile.network) await send(target, 'Network.emulateNetworkConditions', { offline: false, latency: profile.network.latencyMs, downloadThroughput: profile.network.downloadKbps * 1024 / 8, uploadThroughput: profile.network.uploadKbps * 1024 / 8, connectionType: 'other' });
+    if (profile.network) await send(target, 'Network.emulateNetworkConditions', { offline: false, latency: profile.network.latencyMs, downloadThroughput: profile.network.downloadKbps > 0 ? profile.network.downloadKbps * 1024 / 8 : -1, uploadThroughput: profile.network.uploadKbps > 0 ? profile.network.uploadKbps * 1024 / 8 : -1, connectionType: 'other' });
     if (profile.cpuSlowdown && profile.cpuSlowdown !== 1) await send(target, 'Emulation.setCPUThrottlingRate', { rate: profile.cpuSlowdown });
     if (profile.viewport) await send(target, 'Emulation.setDeviceMetricsOverride', profile.viewport);
     await send(target, 'Tracing.start', { categories: 'devtools.timeline,blink.user_timing,loading', transferMode: 'ReturnAsStream' });
