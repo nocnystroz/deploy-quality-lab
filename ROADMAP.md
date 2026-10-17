@@ -18,6 +18,12 @@ Rozszerzenie Manifest V3 wykonuje testy pełnego ładowania przez Chrome DevTool
 
 Lighthouse pozostaje opcjonalnym, ręcznym auditem uruchamianym w Chrome DevTools. Projekt nie wymaga companion application ani Native Messaging.
 
+## Smoke tests i diagnostyka sieci
+
+- Trwałe, lokalne suite’y smoke: URL bazowy, przypadki ze statusem HTTP, widocznym tekstem, selektorem CSS i krokami interakcji.
+- Błędy smoke zachowują HAR, trace DevTools i screenshot; sukcesy pozostają lekkie.
+- Waterfall sieci pokazuje żądania, transfer, statusy i najwolniejsze zasoby dla medianowego runu oraz błędów smoke.
+
 ## Etapy
 
 ### 0.1 — działający MVP
