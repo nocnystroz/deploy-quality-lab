@@ -1,4 +1,5 @@
 import type { Artifact, Metrics, TestProfile, TestRun } from '../shared/types';
+import { blockedUrlPatterns } from '../shared/network';
 
 type Debuggee = chrome.debugger.Debuggee;
 interface NetworkRecord { request?: any; response?: any; started?: number; finished?: number; encodedDataLength?: number; }
@@ -80,7 +81,8 @@ export async function runBrowser(profile: TestProfile, url: string, index: numbe
     await send(target, 'Page.addScriptToEvaluateOnNewDocument', { source: `(() => { window.__deploySpeedVitals = { lcp: undefined, cls: 0, inp: undefined }; new PerformanceObserver(list => { const entries = list.getEntries(); const last = entries[entries.length - 1]; if (last) window.__deploySpeedVitals.lcp = last.startTime; }).observe({ type: 'largest-contentful-paint', buffered: true }); new PerformanceObserver(list => { for (const entry of list.getEntries()) if (!entry.hadRecentInput) window.__deploySpeedVitals.cls += entry.value; }).observe({ type: 'layout-shift', buffered: true }); new PerformanceObserver(list => { for (const entry of list.getEntries()) window.__deploySpeedVitals.inp = Math.max(window.__deploySpeedVitals.inp || 0, entry.duration || 0); }).observe({ type: 'event', buffered: true, durationThreshold: 16 }); })()` });
     await send(target, 'Network.setCacheDisabled', { cacheDisabled: profile.disableCache });
     if (profile.userAgent) await send(target, 'Network.setUserAgentOverride', { userAgent: profile.userAgent });
-    if (profile.blockedPatterns.length) await send(target, 'Network.setBlockedURLs', { urls: profile.blockedPatterns });
+    const blockedPatterns = blockedUrlPatterns(profile.blockedPatterns);
+    if (blockedPatterns.length) await send(target, 'Network.setBlockedURLs', { urls: blockedPatterns });
     if (profile.network) await send(target, 'Network.emulateNetworkConditions', { offline: false, latency: profile.network.latencyMs, downloadThroughput: profile.network.downloadKbps * 1024 / 8, uploadThroughput: profile.network.uploadKbps * 1024 / 8, connectionType: 'other' });
     if (profile.cpuSlowdown && profile.cpuSlowdown !== 1) await send(target, 'Emulation.setCPUThrottlingRate', { rate: profile.cpuSlowdown });
     if (profile.viewport) await send(target, 'Emulation.setDeviceMetricsOverride', profile.viewport);
@@ -94,7 +96,7 @@ export async function runBrowser(profile: TestProfile, url: string, index: numbe
     const traceComplete = cdpEvent(target, 'Tracing.tracingComplete'); await send(target, 'Tracing.end');
     const traceInfo = await traceComplete; const artifacts: Artifact[] = [{ kind: 'har', filename: `run-${index}.har`, mimeType: 'application/json', content: toHar(records) }];
     if (traceInfo.stream) artifacts.push({ kind: 'trace', filename: `run-${index}.json`, mimeType: 'application/json', content: await readTrace(target, traceInfo.stream) });
-    if (profile.debugMode) artifacts.push({ kind: 'debug', filename: `run-${index}-debug.json`, mimeType: 'application/json', content: JSON.stringify({ url, config: { disableCache: profile.disableCache, blockedPatterns: profile.blockedPatterns, network: profile.network, viewport: profile.viewport }, events: debugEvents }, null, 2) });
+    if (profile.debugMode) artifacts.push({ kind: 'debug', filename: `run-${index}-debug.json`, mimeType: 'application/json', content: JSON.stringify({ url, config: { disableCache: profile.disableCache, blockedPatterns, network: profile.network, viewport: profile.viewport }, events: debugEvents }, null, 2) });
     return { id: crypto.randomUUID(), url, index, startedAt, durationMs: performance.now() - start, metrics, artifacts };
   } catch (error) { return { id: crypto.randomUUID(), url, index, startedAt, durationMs: performance.now() - start, error: String(error), artifacts: profile.debugMode ? [{ kind: 'debug', filename: `run-${index}-debug.json`, mimeType: 'application/json', content: JSON.stringify({ url, error: String(error), events: debugEvents }, null, 2) }] : undefined }; }
   finally { chrome.debugger.onEvent.removeListener(onEvent); await chrome.debugger.detach(target).catch(() => undefined); await chrome.tabs.remove(tab.id).catch(() => undefined); }
