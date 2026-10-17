@@ -31,6 +31,7 @@ Lokalne rozszerzenie Chrome do powtarzalnego porównywania jakości wdrożenia p
 - Edycja, usuwanie, import oraz eksport suite’ów JSON.
 - Artefakty przy błędzie: HAR, trace i screenshot.
 - Wykrywanie best-effort React/Next.js w wyniku oraz presety sprawdzające standardowe kontenery #root i #__next.
+- Po każdym kliknięciu scenariusz zapisuje czas interakcji, zmianę trasy SPA oraz przyrost zasobów i transferu; przydatne dla Next router, React Router i aplikacji zbudowanych Vite.
 
 ### Ergonomia i dane
 
