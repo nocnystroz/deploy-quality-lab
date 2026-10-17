@@ -102,7 +102,19 @@ export interface SmokeCase {
   expectedText?: string;
   expectedSelector?: string;
   seoChecks?: SeoCheck[];
+  textChecks?: TextCheck[];
   actions: Action[];
+}
+
+export interface TextCheck {
+  id: string;
+  name: string;
+  source: "css" | "xpath" | "regex";
+  query: string;
+  /** Optional element attribute; otherwise the element text is extracted. */
+  attribute?: string;
+  minLength?: number;
+  maxLength?: number;
 }
 
 export type SeoCheck =
@@ -112,7 +124,22 @@ export type SeoCheck =
   | "hreflang"
   | "robots"
   | "htmlLang"
-  | "h1";
+  | "h1"
+  | "indexable"
+  | "canonicalSelf"
+  | "hreflangXDefault"
+  | "hreflangReciprocal"
+  | "titleLength"
+  | "metaDescriptionLength"
+  | "robotsTxt"
+  | "sitemapXml";
+
+export interface SeoRules {
+  titleMinLength: number;
+  titleMaxLength: number;
+  descriptionMinLength: number;
+  descriptionMaxLength: number;
+}
 
 export interface SmokeSuite {
   id: string;
@@ -120,6 +147,7 @@ export interface SmokeSuite {
   baseUrl: string;
   blockedPatterns: string[];
   requestTimeoutMs: number;
+  seoRules?: SeoRules;
   cases: SmokeCase[];
   createdAt: string;
   updatedAt: string;

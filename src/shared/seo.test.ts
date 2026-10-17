@@ -25,4 +25,13 @@ describe("applySeoChecks", () => {
       applySeoChecks(suite, ["canonical", "title"]).cases[0].seoChecks,
     ).toEqual(["title", "canonical"]);
   });
+
+  it("starts with editable title and description length limits", () => {
+    expect(newSmokeSuite().seoRules).toEqual({
+      titleMinLength: 10,
+      titleMaxLength: 60,
+      descriptionMinLength: 70,
+      descriptionMaxLength: 160,
+    });
+  });
 });

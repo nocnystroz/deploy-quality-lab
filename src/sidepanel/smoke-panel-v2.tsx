@@ -9,6 +9,7 @@ import type {
   SmokeRun,
   SmokeSuite,
   SeoCheck,
+  TextCheck,
 } from "../shared/types";
 import type { Language } from "./i18n";
 import { Waterfall } from "./waterfall";
@@ -135,7 +136,15 @@ const seoCopy: Record<Language, Record<SeoCheck, string>> = {
     hreflang: "Hreflang",
     robots: "Meta robots",
     htmlLang: "Atrybut lang HTML",
-    h1: "Nagłówek H1",
+    h1: "Dokładnie jeden H1",
+    indexable: "Bez noindex / nofollow",
+    canonicalSelf: "Canonical = bieżący URL",
+    hreflangXDefault: "Hreflang x-default",
+    hreflangReciprocal: "Wzajemność hreflangów",
+    titleLength: "Długość title",
+    metaDescriptionLength: "Długość description",
+    robotsTxt: "robots.txt",
+    sitemapXml: "sitemap.xml",
   },
   en: {
     title: "Meta title",
@@ -144,7 +153,15 @@ const seoCopy: Record<Language, Record<SeoCheck, string>> = {
     hreflang: "Hreflang",
     robots: "Meta robots",
     htmlLang: "HTML lang attribute",
-    h1: "H1 heading",
+    h1: "Exactly one H1",
+    indexable: "No noindex / nofollow",
+    canonicalSelf: "Canonical = current URL",
+    hreflangXDefault: "Hreflang x-default",
+    hreflangReciprocal: "Reciprocal hreflangs",
+    titleLength: "Title length",
+    metaDescriptionLength: "Description length",
+    robotsTxt: "robots.txt",
+    sitemapXml: "sitemap.xml",
   },
 };
 
@@ -162,10 +179,17 @@ function Card({
   lang: Language;
 }) {
   const actions = item.actions;
+  const textChecks = item.textChecks ?? [];
   const patchAction = (index: number, action: Action) =>
     update({
       actions: actions.map((current, currentIndex) =>
         currentIndex === index ? action : current,
+      ),
+    });
+  const patchTextCheck = (index: number, next: Partial<TextCheck>) =>
+    update({
+      textChecks: textChecks.map((check, checkIndex) =>
+        checkIndex === index ? { ...check, ...next } : check,
       ),
     });
   return (
@@ -378,6 +402,140 @@ function Card({
       <details>
         <summary>
           {lang === "pl"
+            ? `Własne testy tekstu (${textChecks.length})`
+            : `Custom text checks (${textChecks.length})`}
+        </summary>
+        <p className="seo-hint">
+          {lang === "pl"
+            ? "Pobierz tekst CSS/XPath albo dopasowanie RegExp i sprawdź jego długość. Dla CSS/XPath podaj atrybut (np. content), aby testować wartość atrybutu zamiast tekstu."
+            : "Extract CSS/XPath text or a RegExp match and check its length. For CSS/XPath, enter an attribute (e.g. content) to test it instead of element text."}
+        </p>
+        {textChecks.map((check, index) => (
+          <div className="smoke-card text-check" key={check.id}>
+            <div className="smoke-fields">
+              <label>
+                {lang === "pl" ? "Nazwa" : "Name"}
+                <input
+                  value={check.name}
+                  onChange={(event) =>
+                    patchTextCheck(index, { name: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                {lang === "pl" ? "Źródło" : "Source"}
+                <select
+                  value={check.source}
+                  onChange={(event) =>
+                    patchTextCheck(index, {
+                      source: event.target.value as TextCheck["source"],
+                    })
+                  }
+                >
+                  <option value="css">CSS</option>
+                  <option value="xpath">XPath</option>
+                  <option value="regex">RegExp</option>
+                </select>
+              </label>
+              <label>
+                {lang === "pl"
+                  ? "Selektor / XPath / RegExp"
+                  : "Selector / XPath / RegExp"}
+                <input
+                  value={check.query}
+                  onChange={(event) =>
+                    patchTextCheck(index, { query: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                {lang === "pl"
+                  ? "Atrybut (opcjonalnie)"
+                  : "Attribute (optional)"}
+                <input
+                  disabled={check.source === "regex"}
+                  placeholder="content"
+                  value={check.attribute ?? ""}
+                  onChange={(event) =>
+                    patchTextCheck(index, {
+                      attribute: event.target.value || undefined,
+                    })
+                  }
+                />
+              </label>
+              <label>
+                {lang === "pl" ? "Min. długość" : "Min. length"}
+                <input
+                  type="number"
+                  min="0"
+                  value={check.minLength ?? ""}
+                  onChange={(event) =>
+                    patchTextCheck(index, {
+                      minLength:
+                        event.target.value === ""
+                          ? undefined
+                          : Math.max(0, Number(event.target.value)),
+                    })
+                  }
+                />
+              </label>
+              <label>
+                {lang === "pl" ? "Maks. długość" : "Max. length"}
+                <input
+                  type="number"
+                  min="0"
+                  value={check.maxLength ?? ""}
+                  onChange={(event) =>
+                    patchTextCheck(index, {
+                      maxLength:
+                        event.target.value === ""
+                          ? undefined
+                          : Math.max(0, Number(event.target.value)),
+                    })
+                  }
+                />
+              </label>
+            </div>
+            <button
+              title={lang === "pl" ? "Usuń test tekstu" : "Remove text check"}
+              onClick={() =>
+                update({
+                  textChecks: textChecks.filter(
+                    (_, checkIndex) => checkIndex !== index,
+                  ),
+                })
+              }
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <div className="button-row">
+          {(["css", "xpath", "regex"] as const).map((source) => (
+            <button
+              key={source}
+              onClick={() =>
+                update({
+                  textChecks: [
+                    ...textChecks,
+                    {
+                      id: crypto.randomUUID(),
+                      name: source.toUpperCase(),
+                      source,
+                      query: "",
+                    },
+                  ],
+                })
+              }
+            >
+              + {source.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </details>
+      <details>
+        <summary>
+          {lang === "pl"
             ? `SEO (${item.seoChecks?.length ?? 0})`
             : `SEO (${item.seoChecks?.length ?? 0})`}
         </summary>
@@ -438,6 +596,14 @@ export function SmokePanelV2({ lang }: { lang: Language }) {
         item.id === id ? { ...item, ...value } : item,
       ),
     });
+  const seoRules = suite.seoRules ?? {
+    titleMinLength: 10,
+    titleMaxLength: 60,
+    descriptionMinLength: 70,
+    descriptionMaxLength: 160,
+  };
+  const patchSeoRule = (key: keyof typeof seoRules, value: number) =>
+    patch({ seoRules: { ...seoRules, [key]: Math.max(0, value) } });
   const addCase = (preset?: "nextjs" | "react") =>
     patch({
       cases: [
@@ -563,6 +729,81 @@ export function SmokePanelV2({ lang }: { lang: Language }) {
           ? "Dodaj cały zestaw albo zaznaczone kontrole do wszystkich scenariuszy w tym suite."
           : "Add the complete set or selected assertions to every scenario in this suite."}
       </p>
+      {(selectedSeoChecks.includes("titleLength") ||
+        selectedSeoChecks.includes("metaDescriptionLength")) && (
+        <div className="grid seo-rules">
+          <label>
+            Title min
+            <input
+              title={
+                lang === "pl"
+                  ? "Minimalna liczba znaków title dla testu długości."
+                  : "Minimum title character count for the length check."
+              }
+              type="number"
+              min="0"
+              value={seoRules.titleMinLength}
+              onChange={(event) =>
+                patchSeoRule("titleMinLength", Number(event.target.value) || 0)
+              }
+            />
+          </label>
+          <label>
+            Title max
+            <input
+              title={
+                lang === "pl"
+                  ? "Maksymalna liczba znaków title dla testu długości."
+                  : "Maximum title character count for the length check."
+              }
+              type="number"
+              min="0"
+              value={seoRules.titleMaxLength}
+              onChange={(event) =>
+                patchSeoRule("titleMaxLength", Number(event.target.value) || 0)
+              }
+            />
+          </label>
+          <label>
+            Description min
+            <input
+              title={
+                lang === "pl"
+                  ? "Minimalna liczba znaków meta description dla testu długości."
+                  : "Minimum meta description character count for the length check."
+              }
+              type="number"
+              min="0"
+              value={seoRules.descriptionMinLength}
+              onChange={(event) =>
+                patchSeoRule(
+                  "descriptionMinLength",
+                  Number(event.target.value) || 0,
+                )
+              }
+            />
+          </label>
+          <label>
+            Description max
+            <input
+              title={
+                lang === "pl"
+                  ? "Maksymalna liczba znaków meta description dla testu długości."
+                  : "Maximum meta description character count for the length check."
+              }
+              type="number"
+              min="0"
+              value={seoRules.descriptionMaxLength}
+              onChange={(event) =>
+                patchSeoRule(
+                  "descriptionMaxLength",
+                  Number(event.target.value) || 0,
+                )
+              }
+            />
+          </label>
+        </div>
+      )}
       <div className="metric-options seo-options">
         {seoChecks.map((check) => (
           <label className="check" key={check}>

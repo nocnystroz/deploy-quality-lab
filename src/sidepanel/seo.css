@@ -7,3 +7,16 @@
 .seo-options {
   margin-top: 6px;
 }
+
+.text-check {
+  position: relative;
+}
+.text-check > button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border: 0;
+  background: transparent;
+  color: #b42318;
+  cursor: pointer;
+}

@@ -8,6 +8,14 @@ export const seoChecks: readonly SeoCheck[] = [
   "robots",
   "htmlLang",
   "h1",
+  "indexable",
+  "canonicalSelf",
+  "hreflangXDefault",
+  "hreflangReciprocal",
+  "titleLength",
+  "metaDescriptionLength",
+  "robotsTxt",
+  "sitemapXml",
 ];
 
 /** Adds the selected local SEO assertions to every scenario in a smoke suite. */

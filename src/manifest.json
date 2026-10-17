@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Deploy Quality Lab",
-  "version": "0.1.0.67",
+  "version": "0.1.0.68",
   "description": "Lokalne testy jakości, wydajności i smoke testy przed i po wdrożeniu.",
   "icons": { "16": "assets/deploy-quality-lab-icon.png", "32": "assets/deploy-quality-lab-icon.png", "48": "assets/deploy-quality-lab-icon.png", "128": "assets/deploy-quality-lab-icon.png" },
   "permissions": ["sidePanel", "storage", "tabs", "windows", "debugger", "scripting", "downloads"],

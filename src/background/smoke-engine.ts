@@ -64,6 +64,64 @@ async function trace(
 }
 
 type Interaction = NonNullable<SmokeCheckResult["interactions"]>[number];
+
+function normalizedUrl(value: string, base: string): string | undefined {
+  try {
+    const url = new URL(value, base);
+    url.hash = "";
+    return url.href;
+  } catch {
+    return undefined;
+  }
+}
+
+export function hasReciprocalHreflang(
+  html: string,
+  sourceUrl: string,
+  sourceLanguage: string,
+  targetUrl: string,
+): boolean {
+  const source = normalizedUrl(sourceUrl, targetUrl);
+  return [...html.matchAll(/<link\b[^>]*>/gi)].some(([tag]) => {
+    const attr = (name: string) =>
+      new RegExp(`\\b${name}\\s*=\\s*["']([^"']+)["']`, "i").exec(tag)?.[1];
+    const rel = attr("rel")?.toLowerCase().split(/\s+/) ?? [];
+    const href = attr("href");
+    return (
+      rel.includes("alternate") &&
+      attr("hreflang")?.toLowerCase() === sourceLanguage.toLowerCase() &&
+      href !== undefined &&
+      normalizedUrl(href, targetUrl) === source
+    );
+  });
+}
+
+async function hreflangsAreReciprocal(
+  links: { href: string }[],
+  sourceUrl: string,
+  sourceLanguage: string,
+): Promise<boolean> {
+  if (!links.length || !sourceLanguage) return false;
+  const checks = await Promise.all(
+    links.map(async (link) => {
+      try {
+        const response = await fetch(link.href);
+        return (
+          response.ok &&
+          hasReciprocalHreflang(
+            await response.text(),
+            sourceUrl,
+            sourceLanguage,
+            link.href,
+          )
+        );
+      } catch {
+        return false;
+      }
+    }),
+  );
+  return checks.every(Boolean);
+}
 async function snapshot(tabId: number) {
   const result = await chrome.scripting.executeScript({
     target: { tabId },
@@ -202,56 +260,169 @@ export async function runSmokeCase(
     const interactions = await actions(tab.id, item.actions, failures);
     const data = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: (selector?: string, seoChecks: string[] = []) => {
+      func: async (
+        selector?: string,
+        seoChecks: string[] = [],
+        rules = {
+          titleMinLength: 10,
+          titleMaxLength: 60,
+          descriptionMinLength: 70,
+          descriptionMaxLength: 160,
+        },
+        textChecks: {
+          id: string;
+          name: string;
+          source: "css" | "xpath" | "regex";
+          query: string;
+          attribute?: string;
+          minLength?: number;
+          maxLength?: number;
+        }[] = [],
+      ) => {
         const text = document.body?.innerText ?? "";
         const seo: Record<string, boolean> = {};
+        const title = document.title.trim();
+        const description =
+          document
+            .querySelector('meta[name="description"]')
+            ?.getAttribute("content")
+            ?.trim() ?? "";
+        const canonical =
+          document
+            .querySelector('link[rel~="canonical"]')
+            ?.getAttribute("href")
+            ?.trim() ?? "";
+        const normalize = (value: string, base = location.href) => {
+          try {
+            const url = new URL(value, base);
+            url.hash = "";
+            return url.href;
+          } catch {
+            return "";
+          }
+        };
+        const alternateLinks = Array.from(
+          document.querySelectorAll('link[rel~="alternate"][hreflang]'),
+        )
+          .map((link) => ({
+            hreflang: link.getAttribute("hreflang")?.trim() ?? "",
+            href: normalize(link.getAttribute("href") ?? ""),
+          }))
+          .filter((link) => link.hreflang && link.href);
+        const robots = Array.from(
+          document.querySelectorAll(
+            'meta[name="robots"], meta[name="googlebot"]',
+          ),
+        )
+          .map((meta) => meta.getAttribute("content")?.toLowerCase() ?? "")
+          .join(",");
+        const fetchText = async (path: string) => {
+          try {
+            const response = await fetch(new URL(path, location.origin));
+            return response.ok ? await response.text() : "";
+          } catch {
+            return "";
+          }
+        };
         for (const check of seoChecks) {
           seo[check] =
             check === "title"
-              ? Boolean(document.title.trim())
+              ? Boolean(title)
               : check === "metaDescription"
-                ? Boolean(
-                    document
-                      .querySelector('meta[name="description"]')
-                      ?.getAttribute("content")
-                      ?.trim(),
-                  )
+                ? Boolean(description)
                 : check === "canonical"
-                  ? Boolean(
-                      document
-                        .querySelector('link[rel~="canonical"]')
-                        ?.getAttribute("href")
-                        ?.trim(),
-                    )
+                  ? Boolean(canonical)
                   : check === "hreflang"
-                    ? Array.from(
-                        document.querySelectorAll(
-                          'link[rel~="alternate"][hreflang]',
-                        ),
-                      ).some((link) =>
-                        Boolean(
-                          link.getAttribute("hreflang")?.trim() &&
-                          link.getAttribute("href")?.trim(),
-                        ),
-                      )
+                    ? alternateLinks.length > 0
                     : check === "robots"
-                      ? Boolean(
-                          document
-                            .querySelector('meta[name="robots"]')
-                            ?.getAttribute("content")
-                            ?.trim(),
-                        )
+                      ? Boolean(robots)
                       : check === "htmlLang"
                         ? Boolean(document.documentElement.lang.trim())
                         : check === "h1"
-                          ? Boolean(
+                          ? document.querySelectorAll("h1").length === 1 &&
+                            Boolean(
                               document.querySelector("h1")?.textContent?.trim(),
                             )
-                          : false;
+                          : check === "indexable"
+                            ? !/\b(noindex|nofollow|none)\b/.test(robots)
+                            : check === "canonicalSelf"
+                              ? Boolean(canonical) &&
+                                normalize(canonical) ===
+                                  normalize(location.href)
+                              : check === "hreflangXDefault"
+                                ? alternateLinks.some(
+                                    (link) =>
+                                      link.hreflang.toLowerCase() ===
+                                      "x-default",
+                                  )
+                                : check === "titleLength"
+                                  ? title.length >= rules.titleMinLength &&
+                                    title.length <= rules.titleMaxLength
+                                  : check === "metaDescriptionLength"
+                                    ? description.length >=
+                                        rules.descriptionMinLength &&
+                                      description.length <=
+                                        rules.descriptionMaxLength
+                                    : check === "robotsTxt"
+                                      ? /user-agent\s*:/i.test(
+                                          await fetchText("/robots.txt"),
+                                        )
+                                      : check === "sitemapXml"
+                                        ? /<(urlset|sitemapindex)\b/i.test(
+                                            await fetchText("/sitemap.xml"),
+                                          )
+                                        : false;
         }
+        const textCheckResults = textChecks.map((check) => {
+          try {
+            let value: string | undefined;
+            if (check.source === "regex") {
+              const match = new RegExp(check.query).exec(
+                document.documentElement.outerHTML,
+              );
+              value = match?.[1] ?? match?.[0];
+            } else {
+              const node =
+                check.source === "css"
+                  ? document.querySelector(check.query)
+                  : (document.evaluate(
+                      check.query,
+                      document,
+                      null,
+                      XPathResult.FIRST_ORDERED_NODE_TYPE,
+                      null,
+                    ).singleNodeValue as Element | null);
+              value = check.attribute
+                ? (node?.getAttribute(check.attribute) ?? undefined)
+                : (node?.textContent ?? undefined);
+            }
+            const extracted = value?.trim();
+            return {
+              id: check.id,
+              name: check.name,
+              found: Boolean(extracted),
+              length: extracted?.length ?? 0,
+              minLength: check.minLength,
+              maxLength: check.maxLength,
+            };
+          } catch (error) {
+            return {
+              id: check.id,
+              name: check.name,
+              found: false,
+              length: 0,
+              minLength: check.minLength,
+              maxLength: check.maxLength,
+              error: String(error),
+            };
+          }
+        });
         return {
           text,
           seo,
+          textCheckResults,
+          alternateLinks,
+          sourceLanguage: document.documentElement.lang.trim(),
           selectorFound: selector
             ? Boolean(document.querySelector(selector))
             : true,
@@ -266,7 +437,12 @@ export async function runSmokeCase(
                 : "unknown",
         };
       },
-      args: [item.expectedSelector, item.seoChecks ?? []],
+      args: [
+        item.expectedSelector,
+        item.seoChecks ?? [],
+        suite.seoRules,
+        item.textChecks ?? [],
+      ],
     });
     const main =
       records.find((record) => record.url === url) ??
@@ -279,6 +455,34 @@ export async function runSmokeCase(
       failures.push(`Text not found: ${item.expectedText}`);
     if (item.expectedSelector && !data[0]?.result?.selectorFound)
       failures.push(`Selector not found: ${item.expectedSelector}`);
+    const page = data[0]?.result;
+    if (item.seoChecks?.includes("hreflangReciprocal") && page)
+      page.seo.hreflangReciprocal = await hreflangsAreReciprocal(
+        page.alternateLinks ?? [],
+        url,
+        page.sourceLanguage ?? "",
+      );
+    for (const result of page?.textCheckResults ?? []) {
+      const label = result.name || result.id;
+      if (result.error || !result.found)
+        failures.push(
+          `Text check ${label}: no value found${result.error ? ` (${result.error})` : ""}.`,
+        );
+      else if (
+        result.minLength !== undefined &&
+        result.length < result.minLength
+      )
+        failures.push(
+          `Text check ${label}: ${result.length} characters, minimum is ${result.minLength}.`,
+        );
+      else if (
+        result.maxLength !== undefined &&
+        result.length > result.maxLength
+      )
+        failures.push(
+          `Text check ${label}: ${result.length} characters, maximum is ${result.maxLength}.`,
+        );
+    }
     for (const check of item.seoChecks ?? [])
       if (!data[0]?.result?.seo?.[check])
         failures.push(`SEO: missing or empty ${check}.`);
