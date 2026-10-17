@@ -1,4 +1,4 @@
-export type Engine = 'browser' | 'curl';
+export type Engine = 'browser' | 'fetch';
 export type Aggregate = 'median' | 'p75' | 'p90';
 export type SeriesKind = 'before' | 'after' | 'custom';
 export type Action =
@@ -32,7 +32,6 @@ export interface TestProfile {
   /** Unrecorded attempts used to stabilise a test environment before measured runs. */
   warmupRuns: number;
   thresholds: Thresholds;
-  lighthouse: boolean;
   /** Stores a compact CDP diagnostic log with the run; never sent off-device. */
   debugMode?: boolean;
   createdAt: string;
@@ -53,7 +52,7 @@ export interface Metrics {
 }
 
 export interface Artifact {
-  kind: 'har' | 'trace' | 'lighthouse' | 'debug';
+  kind: 'har' | 'trace' | 'debug';
   filename: string;
   mimeType: string;
   content: string;
@@ -86,13 +85,3 @@ export interface Series {
   referenceSeriesId?: string;
 }
 
-export interface NativeRequest {
-  type: 'curl' | 'lighthouse' | 'ping';
-  payload: unknown;
-}
-
-export interface NativeResponse {
-  ok: boolean;
-  data?: unknown;
-  error?: string;
-}

@@ -5,7 +5,7 @@ export function newProfile(): TestProfile {
   return {
     id: crypto.randomUUID(), name: 'Nowy profil', urls: ['https://example.com'],
     engine: 'browser', runs: 5, aggregate: 'median', disableCache: true,
-    blockedPatterns: [], actions: [], thresholds: {}, lighthouse: false, warmupRuns: 0,
+    blockedPatterns: [], actions: [], thresholds: {}, warmupRuns: 0,
     createdAt: now, updatedAt: now
   };
 }

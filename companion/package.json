@@ -1,6 +1,0 @@
-{
-  "name": "deploy-speed-tester-companion",
-  "private": true,
-  "type": "module",
-  "dependencies": { "lighthouse": "^12.2.2", "chrome-launcher": "^1.1.2" }
-}

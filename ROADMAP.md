@@ -14,9 +14,9 @@ Lokalne rozszerzenie Chrome dla developerów, które porównuje wydajność inst
 
 ## Architektura
 
-Rozszerzenie Manifest V3 wykonuje testy pełnego ładowania przez Chrome DevTools Protocol. Zbiera czas nawigacji, TTFB, FCP, transfer, status, HAR oraz trace możliwy do otwarcia w Chrome DevTools. Artefakty pozostają wyłącznie dla medianowego runu, aby ograniczać rozmiar historii.
+Rozszerzenie Manifest V3 wykonuje testy pełnego ładowania przez Chrome DevTools Protocol oraz pojedyncze requesty HTTP przez wbudowane `fetch`. Zbiera czas nawigacji, TTFB, FCP, transfer, status, HAR oraz trace możliwy do otwarcia w Chrome DevTools. Artefakty pozostają wyłącznie dla medianowego runu, aby ograniczać rozmiar historii.
 
-Lokalny Node.js companion komunikowany przez Native Messaging wykonuje prawdziwe `curl` i jeden audit Lighthouse na serię. Lighthouse jest pomocniczym artefaktem, a nie elementem agregacji wielu runów. Companion będzie dystrybuowany z instalatorami dla macOS, Windows i Linux.
+Lighthouse pozostaje opcjonalnym, ręcznym auditem uruchamianym w Chrome DevTools. Projekt nie wymaga companion application ani Native Messaging.
 
 ## Etapy
 
@@ -24,7 +24,7 @@ Lokalny Node.js companion komunikowany przez Native Messaging wykonuje prawdziwe
 
 - Profile, serie, trwały IndexedDB storage i porównanie wyników.
 - Browser engine z cache/UA/blokadami, krokami interakcji, HAR i trace.
-- Curl engine przez companion oraz eksport CSV, HTML, HAR, trace i Lighthouse.
+- HTTP request engine przez `fetch` oraz eksport CSV, HTML, HAR i trace.
 - Progi dla total time, TTFB, LCP i dopuszczalnej regresji procentowej.
 - Testy jednostkowe agregacji i progów oraz instrukcja lokalnej instalacji.
 
@@ -39,7 +39,7 @@ Lokalny Node.js companion komunikowany przez Native Messaging wykonuje prawdziwe
 
 - Import/eksport profili JSON, duplikowanie profilu i wersjonowanie konfiguracji.
 - Raport porównawczy wielu URL-i, filtrowanie historii i retencja artefaktów.
-- Podpisane pakiety companion oraz instalatory trzech systemów.
+- Przenośny bundle rozszerzenia dla trzech systemów.
 
 ## Kryteria akceptacji
 
@@ -47,4 +47,4 @@ Lokalny Node.js companion komunikowany przez Native Messaging wykonuje prawdziwe
 2. Seria `after` wskazuje zmianę względem `before` i oznacza przekroczony próg.
 3. Cookie banner może zostać kliknięty, a wzorzec URL zablokowany podczas testu przeglądarkowego.
 4. Eksportuje się poprawny HAR medianowego runu, trace DevTools, CSV i raport HTML.
-5. Brak companionu daje jasny komunikat dla curl/Lighthouse, bez utraty zapisanej historii.
+5. Rozszerzenie działa po instalacji bez dodatkowego procesu lokalnego.
