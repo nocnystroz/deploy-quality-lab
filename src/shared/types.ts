@@ -2,7 +2,7 @@ export type Engine = 'browser' | 'fetch';
 export type Aggregate = 'median' | 'p75' | 'p90';
 export type SeriesKind = 'before' | 'after' | 'custom';
 export type Action =
-  | { type: 'click'; selector: string; timeoutMs: number }
+  | { type: 'click'; selector: string; timeoutMs: number; optional?: boolean }
   | { type: 'wait'; durationMs: number }
   | { type: 'scroll'; x: number; y: number };
 
@@ -56,7 +56,7 @@ export interface Metrics {
 }
 
 export interface Artifact {
-  kind: 'har' | 'trace' | 'debug';
+  kind: 'har' | 'trace' | 'debug' | 'screenshot';
   filename: string;
   mimeType: string;
   content: string;
@@ -87,5 +87,48 @@ export interface Series {
   summary?: Metrics;
   thresholdFailures: string[];
   referenceSeriesId?: string;
+}
+
+export interface SmokeCase {
+  id: string;
+  name: string;
+  path: string;
+  expectedStatus: number;
+  expectedText?: string;
+  expectedSelector?: string;
+  actions: Action[];
+}
+
+export interface SmokeSuite {
+  id: string;
+  name: string;
+  baseUrl: string;
+  blockedPatterns: string[];
+  requestTimeoutMs: number;
+  cases: SmokeCase[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SmokeCheckResult {
+  id: string;
+  caseId: string;
+  caseName: string;
+  url: string;
+  status: 'passed' | 'failed';
+  durationMs: number;
+  actualStatus?: number;
+  failures: string[];
+  artifacts?: Artifact[];
+}
+
+export interface SmokeRun {
+  id: string;
+  suiteId: string;
+  suiteName: string;
+  suiteSnapshot: SmokeSuite;
+  status: 'passed' | 'failed' | 'stopped';
+  createdAt: string;
+  results: SmokeCheckResult[];
 }
 

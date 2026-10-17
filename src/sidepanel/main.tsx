@@ -7,6 +7,8 @@ import { medianRun, summarize, thresholdFailures } from '../shared/statistics';
 import { validateProfile } from '../shared/validation';
 import type { Action, Engine, Series, SeriesKind, TestProfile, TestRun } from '../shared/types';
 import { copy, type Language } from './i18n';
+import { SmokePanel } from './smoke-panel';
+import { Waterfall } from './waterfall';
 import './style.css';
 
 function parseLines(value: string): string[] { return value.split('\n').map(line => line.trim()).filter(Boolean); }
@@ -28,7 +30,7 @@ function RunSpread({ runs, title, failed }: { runs: TestRun[]; title: string; fa
 function App() {
   const [lang, setLang] = useState<Language>('pl'); const t = copy[lang];
   const [profiles, setProfiles] = useState<TestProfile[]>([]); const [series, setSeries] = useState<Series[]>([]);
-  const [profile, setProfile] = useState<TestProfile>(newProfile()); const [tab, setTab] = useState<'profile' | 'results'>('profile');
+  const [profile, setProfile] = useState<TestProfile>(newProfile()); const [tab, setTab] = useState<'profile' | 'results' | 'smoke'>('profile');
   const [kind, setKind] = useState<SeriesKind>('before'); const [label, setLabel] = useState(''); const [running, setRunning] = useState(false); const [debug, setDebug] = useState(false);
   const [historyFilter, setHistoryFilter] = useState('');
   const [progress, setProgress] = useState<{ done: number; total: number } | undefined>();
@@ -68,9 +70,9 @@ function App() {
   const visibleSeries = series.filter(item => `${item.label} ${item.profileName} ${item.kind}`.toLocaleLowerCase().includes(historyFilter.toLocaleLowerCase()));
   const toggleExportMetric = (metric: HistoryMetric) => setExportMetrics(current => current.includes(metric) ? current.filter(item => item !== metric) : [...current, metric]);
   return <main>
-    <header><div><b>Deploy Speed</b><small>local performance lab</small></div><div className="header-actions"><button title={t.detached} onClick={() => void chrome.runtime.sendMessage({ type: 'open-detached-window' })}>↗</button><select aria-label="Language" value={lang} onChange={e => setLang(e.target.value as Language)}><option value="pl">PL</option><option value="en">EN</option></select></div></header>
-    <nav><button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>{t.profiles}</button><button className={tab === 'results' ? 'active' : ''} onClick={() => setTab('results')}>{t.results} <em>{series.length}</em></button></nav>
-    {tab === 'profile' ? <section className="content">
+    <header><div><b>Deploy Quality Lab</b><small>local performance & smoke tests</small></div><div className="header-actions"><button title={t.detached} onClick={() => void chrome.runtime.sendMessage({ type: 'open-detached-window' })}>↗</button><select aria-label="Language" value={lang} onChange={e => setLang(e.target.value as Language)}><option value="pl">PL</option><option value="en">EN</option></select></div></header>
+    <nav><button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>{t.profiles}</button><button className={tab === 'results' ? 'active' : ''} onClick={() => setTab('results')}>{t.results} <em>{series.length}</em></button><button className={tab === 'smoke' ? 'active' : ''} onClick={() => setTab('smoke')}>Smoke</button></nav>
+    {tab === 'smoke' ? <SmokePanel /> : tab === 'profile' ? <section className="content">
       <label>{t.profileName}<input value={profile.name} onChange={e => patch({ name: e.target.value })} /></label>
       <label>{t.url}<textarea value={profile.urls.join('\n')} onChange={e => patch({ urls: parseLines(e.target.value) })} placeholder="https://test.example.com" /></label>
       <div className="grid"><label>{t.engine}<select value={profile.engine} onChange={e => patch({ engine: e.target.value as Engine })}><option value="browser">Chrome / CWV</option><option value="fetch">HTTP request (fetch)</option></select></label><label>{t.runs}<input type="number" min="1" max="50" value={profile.runs} onChange={e => patch({ runs: Math.max(1, Number(e.target.value)) })} /></label><label>{t.aggregate}<select value={profile.aggregate} onChange={e => patch({ aggregate: e.target.value as TestProfile['aggregate'] })}><option value="median">Mediana</option><option value="p75">P75</option><option value="p90">P90</option></select></label></div>
@@ -96,7 +98,7 @@ function App() {
           <p className={item.thresholdFailures.length ? 'failure' : 'success'}>{item.thresholdFailures.length ? item.thresholdFailures[0] : '✓ OK'}</p>
           <RunSpread runs={item.runs} title={t.spread} failed={t.failed} />
           <details><summary>{t.runDetails}: {item.runs.filter(run => run.metrics).length}/{item.runs.length}</summary><table><thead><tr><th>#</th><th>URL</th><th>{t.metricTotal}</th><th>{t.metricTtfb}</th><th>{t.error}</th></tr></thead><tbody>{item.runs.map(run => <tr key={run.id}><td>{run.index}</td><td title={run.url}>{run.url}</td><td>{format(run.metrics?.totalMs)}</td><td>{format(run.metrics?.ttfbMs)}</td><td>{run.error ?? '—'}</td></tr>)}</tbody></table></details>
-          <div className="button-row"><button onClick={() => download(seriesCsv(item), `${item.label}.csv`, 'text/csv')}>CSV</button><button onClick={() => download(reportHtml(item, reference), `${item.label}.html`, 'text/html')}>HTML</button>{(['har', 'trace', 'debug'] as const).map(type => { const artifact = artifactByKind(item, type); return artifact && <button key={type} onClick={() => download(artifact.content, artifact.filename, artifact.mimeType)}>{type.toUpperCase()}</button>; })}<button onClick={async () => { await db.series.delete(item.id); await reload(); }}>{t.delete}</button></div>
+          <div className="button-row"><button onClick={() => download(seriesCsv(item), `${item.label}.csv`, 'text/csv')}>CSV</button><button onClick={() => download(reportHtml(item, reference), `${item.label}.html`, 'text/html')}>HTML</button>{(['har', 'trace', 'debug'] as const).map(type => { const artifact = artifactByKind(item, type); return artifact && <button key={type} onClick={() => download(artifact.content, artifact.filename, artifact.mimeType)}>{type.toUpperCase()}</button>; })}<button onClick={async () => { await db.series.delete(item.id); await reload(); }}>{t.delete}</button></div><Waterfall artifact={artifactByKind(item, 'har')} />
         </article>;
       })}
       {visibleSeries.length === 0 && <p>{t.noFilterResults}</p>}

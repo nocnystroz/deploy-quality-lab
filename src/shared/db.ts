@@ -1,8 +1,8 @@
-import type { Series, TestProfile } from './types';
+import type { Series, SmokeRun, SmokeSuite, TestProfile } from './types';
 
 const DB_NAME = 'deploy-speed-tester';
-const VERSION = 1;
-type Store = 'profiles' | 'series';
+const VERSION = 2;
+type Store = 'profiles' | 'series' | 'smokeSuites' | 'smokeRuns';
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -14,6 +14,11 @@ function openDb(): Promise<IDBDatabase> {
         const store = db.createObjectStore('series', { keyPath: 'id' });
         store.createIndex('profileId', 'profileId');
         store.createIndex('createdAt', 'createdAt');
+      }
+      if (!db.objectStoreNames.contains('smokeSuites')) db.createObjectStore('smokeSuites', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('smokeRuns')) {
+        const store = db.createObjectStore('smokeRuns', { keyPath: 'id' });
+        store.createIndex('suiteId', 'suiteId'); store.createIndex('createdAt', 'createdAt');
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -51,5 +56,16 @@ export const db = {
       await Promise.all(expired.map(item => request<undefined>('series', 'readwrite', s => s.delete(item.id))));
       return expired.length;
     }
+  },
+  smokeSuites: {
+    list: () => request<SmokeSuite[]>('smokeSuites', 'readonly', s => s.getAll()),
+    put: (suite: SmokeSuite) => request<IDBValidKey>('smokeSuites', 'readwrite', s => s.put(suite)),
+    delete: (id: string) => request<undefined>('smokeSuites', 'readwrite', s => s.delete(id))
+  },
+  smokeRuns: {
+    list: () => request<SmokeRun[]>('smokeRuns', 'readonly', s => s.getAll()),
+    put: (run: SmokeRun) => request<IDBValidKey>('smokeRuns', 'readwrite', s => s.put(run)),
+    delete: (id: string) => request<undefined>('smokeRuns', 'readwrite', s => s.delete(id)),
+    clear: () => request<undefined>('smokeRuns', 'readwrite', s => s.clear())
   }
 };

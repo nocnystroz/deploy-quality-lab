@@ -1,6 +1,7 @@
 import { runBrowser } from './background/browser-engine';
 import { runFetch } from './background/fetch-engine';
-import type { TestProfile, TestRun } from './shared/types';
+import { runSmokeCase } from './background/smoke-engine';
+import type { SmokeCase, SmokeSuite, TestProfile, TestRun } from './shared/types';
 
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
 
@@ -17,6 +18,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     runFetch(message.profile as TestProfile, message.url, message.index).then(sendResponse).catch(error => sendResponse({ error: String(error) }));
     return true;
   }
+  if (message.type === 'run-smoke-case') { runSmokeCase(message.suite as SmokeSuite, message.case as SmokeCase).then(sendResponse).catch(error => sendResponse({ error: String(error) })); return true; }
   if (message.type === 'validate-actions') {
     chrome.tabs.query({ active: true, currentWindow: true }).then(async tabs => {
       const tabId = tabs[0]?.id;

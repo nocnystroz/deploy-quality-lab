@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Deploy Speed Tester",
-  "version": "0.1.0",
-  "description": "Lokalne porównywanie wydajności przed i po wdrożeniu.",
+  "name": "Deploy Quality Lab",
+  "version": "0.1.0.25",
+  "description": "Lokalne testy jakości, wydajności i smoke testy przed i po wdrożeniu.",
+  "icons": { "16": "assets/deploy-quality-lab-icon.png", "32": "assets/deploy-quality-lab-icon.png", "48": "assets/deploy-quality-lab-icon.png", "128": "assets/deploy-quality-lab-icon.png" },
   "permissions": ["sidePanel", "storage", "tabs", "windows", "debugger", "scripting", "downloads"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "src/background.ts", "type": "module" },
-  "action": { "default_title": "Deploy Speed Tester" },
+  "action": { "default_title": "Deploy Quality Lab" },
   "side_panel": { "default_path": "src/sidepanel/index.html" }
 }
