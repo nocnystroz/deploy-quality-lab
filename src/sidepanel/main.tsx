@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { db } from '../shared/db';
 import { newProfile } from '../shared/defaults';
-import { artifactByKind, download, reportHtml, seriesCsv } from '../shared/export';
+import { artifactByKind, download, historyChartsHtml, historyCsv, historyMetrics, reportHtml, seriesCsv, type HistoryMetric } from '../shared/export';
 import { medianRun, summarize, thresholdFailures } from '../shared/statistics';
 import { validateProfile } from '../shared/validation';
 import type { Action, Engine, Series, SeriesKind, TestProfile, TestRun } from '../shared/types';
@@ -12,6 +12,7 @@ import './style.css';
 function parseLines(value: string): string[] { return value.split('\n').map(line => line.trim()).filter(Boolean); }
 function format(ms?: number): string { return typeof ms === 'number' ? `${Math.round(ms)} ms` : '—'; }
 function delta(current?: number, baseline?: number): string | undefined { if (typeof current !== 'number' || typeof baseline !== 'number' || baseline === 0) return undefined; const percentage = ((current - baseline) / baseline) * 100; return `${percentage > 0 ? '+' : ''}${percentage.toFixed(1)}%`; }
+const metricNames: Record<HistoryMetric, string> = { totalMs: 'Total', ttfbMs: 'TTFB', domContentLoadedMs: 'DOMContentLoaded', loadMs: 'Load', fcpMs: 'FCP', lcpMs: 'LCP', cls: 'CLS', inpMs: 'INP', transferBytes: 'Transfer', status: 'HTTP status' };
 
 function RunSpread({ runs, title, failed }: { runs: TestRun[]; title: string; failed: string }) {
   const measured = runs.filter((run): run is TestRun & { metrics: NonNullable<TestRun['metrics']> } => typeof run.metrics?.totalMs === 'number');
@@ -31,6 +32,7 @@ function App() {
   const [historyFilter, setHistoryFilter] = useState('');
   const [progress, setProgress] = useState<{ done: number; total: number } | undefined>();
   const [retention, setRetention] = useState(50);
+  const [exportMetrics, setExportMetrics] = useState<HistoryMetric[]>([...historyMetrics]);
   const cancelRef = useRef(false);
   const [referenceId, setReferenceId] = useState(''); const importRef = useRef<HTMLInputElement>(null);
   const selectedReference = useMemo(() => series.find(item => item.id === referenceId) ?? series.find(item => item.profileId === profile.id && item.kind === 'before'), [series, profile.id, referenceId]);
@@ -63,6 +65,7 @@ function App() {
   const duplicateProfile = () => { const now = new Date().toISOString(); setProfile({ ...profile, id: crypto.randomUUID(), name: `${profile.name} (copy)`, createdAt: now, updatedAt: now }); };
   const deleteProfile = async (item: TestProfile) => { if (!confirm(`${t.delete} “${item.name}”?`)) return; await db.profiles.delete(item.id); if (item.id === profile.id) setProfile(newProfile()); await reload(); };
   const visibleSeries = series.filter(item => `${item.label} ${item.profileName} ${item.kind}`.toLocaleLowerCase().includes(historyFilter.toLocaleLowerCase()));
+  const toggleExportMetric = (metric: HistoryMetric) => setExportMetrics(current => current.includes(metric) ? current.filter(item => item !== metric) : [...current, metric]);
   return <main>
     <header><div><b>Deploy Speed</b><small>local performance lab</small></div><div className="header-actions"><button title={t.detached} onClick={() => void chrome.runtime.sendMessage({ type: 'open-detached-window' })}>↗</button><select aria-label="Language" value={lang} onChange={e => setLang(e.target.value as Language)}><option value="pl">PL</option><option value="en">EN</option></select></div></header>
     <nav><button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>{t.profiles}</button><button className={tab === 'results' ? 'active' : ''} onClick={() => setTab('results')}>{t.results} <em>{series.length}</em></button></nav>
@@ -96,6 +99,7 @@ function App() {
         </article>;
       })}
       {visibleSeries.length === 0 && <p>{t.noFilterResults}</p>}
+      {series.length > 0 && <fieldset className="history-export"><legend>{t.historyExport}</legend><small>{t.historyExportHint}</small><div className="metric-options">{historyMetrics.map(metric => <label className="check" key={metric}><input type="checkbox" checked={exportMetrics.includes(metric)} onChange={() => toggleExportMetric(metric)} />{metricNames[metric]}</label>)}</div><div className="button-row"><button onClick={() => setExportMetrics([...historyMetrics])}>{t.selectAll}</button><button onClick={() => setExportMetrics([])}>{t.selectNone}</button><button disabled={!exportMetrics.length || !visibleSeries.length} onClick={() => download(historyCsv(visibleSeries, exportMetrics), 'deploy-speed-history.csv', 'text/csv')}>{t.exportData}</button><button disabled={!exportMetrics.length || !visibleSeries.length} onClick={() => download(historyChartsHtml(visibleSeries, exportMetrics), 'deploy-speed-charts.html', 'text/html')}>{t.exportCharts}</button></div></fieldset>}
       <div className="button-row"><label>{t.retention}<input type="number" min="1" max="1000" value={retention} onChange={e => setRetention(Math.max(1, Number(e.target.value) || 1))} /></label><button onClick={async () => { await chrome.storage.local.set({ retention }); const removed = await db.series.prune(retention); alert(`${t.retain}: ${removed}`); await reload(); }}>{t.retain}</button><button className="danger" onClick={async () => { await db.series.clear(); await reload(); }}>{t.clear}</button></div>
     </section>}
     <footer><label className="check"><input type="checkbox" checked={debug} onChange={e => setDebug(e.target.checked)} />{t.debug}</label><a href="https://buymeacoffee.com" target="_blank">☕ {t.coffee}</a><small>v0.1.0 · local only</small></footer>
