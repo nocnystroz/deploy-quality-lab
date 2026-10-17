@@ -31,6 +31,10 @@ export interface TestProfile {
   viewport?: { width: number; height: number; deviceScaleFactor: number; mobile: boolean };
   /** Unrecorded attempts used to stabilise a test environment before measured runs. */
   warmupRuns: number;
+  /** Pause between completed attempts, in milliseconds. */
+  runIntervalMs: number;
+  /** Maximum duration of one navigation or HTTP request, in milliseconds. */
+  requestTimeoutMs: number;
   thresholds: Thresholds;
   /** Stores a compact CDP diagnostic log with the run; never sent off-device. */
   debugMode?: boolean;

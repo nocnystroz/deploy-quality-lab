@@ -87,13 +87,13 @@ export async function runBrowser(profile: TestProfile, url: string, index: numbe
     if (profile.cpuSlowdown && profile.cpuSlowdown !== 1) await send(target, 'Emulation.setCPUThrottlingRate', { rate: profile.cpuSlowdown });
     if (profile.viewport) await send(target, 'Emulation.setDeviceMetricsOverride', profile.viewport);
     await send(target, 'Tracing.start', { categories: 'devtools.timeline,blink.user_timing,loading', transferMode: 'ReturnAsStream' });
-    const loaded = cdpEvent(target, 'Page.loadEventFired');
+    const loaded = cdpEvent(target, 'Page.loadEventFired', profile.requestTimeoutMs ?? 30_000);
     await chrome.tabs.update(tab.id, { url }); await loaded;
     await runActions(tab.id, profile); await sleep(300);
     const metrics = await pageMetrics(tab.id, start);
     const status = [...records.values()].find(r => r.request?.url === url)?.response?.status;
     metrics.status = status;
-    const traceComplete = cdpEvent(target, 'Tracing.tracingComplete'); await send(target, 'Tracing.end');
+    const traceComplete = cdpEvent(target, 'Tracing.tracingComplete', profile.requestTimeoutMs ?? 30_000); await send(target, 'Tracing.end');
     const traceInfo = await traceComplete; const artifacts: Artifact[] = [{ kind: 'har', filename: `run-${index}.har`, mimeType: 'application/json', content: toHar(records) }];
     if (traceInfo.stream) artifacts.push({ kind: 'trace', filename: `run-${index}.json`, mimeType: 'application/json', content: await readTrace(target, traceInfo.stream) });
     if (profile.debugMode) artifacts.push({ kind: 'debug', filename: `run-${index}-debug.json`, mimeType: 'application/json', content: JSON.stringify({ url, config: { disableCache: profile.disableCache, blockedPatterns, network: profile.network, viewport: profile.viewport }, events: debugEvents }, null, 2) });
