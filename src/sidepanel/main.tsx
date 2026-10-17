@@ -31,6 +31,7 @@ import { SmokePanelV2 } from "./smoke-panel-v2";
 import { Waterfall } from "./waterfall";
 import "./style.css";
 import "./comparison.css";
+import "./seo.css";
 
 function parseLines(value: string): string[] {
   return value

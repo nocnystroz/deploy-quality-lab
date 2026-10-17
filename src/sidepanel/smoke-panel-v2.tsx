@@ -1,33 +1,706 @@
-import { useEffect, useState } from 'react';
-import { db } from '../shared/db';
-import { newSmokeSuite, validateSmokeSuite } from '../shared/smoke';
-import type { Action, SmokeCase, SmokeCheckResult, SmokeRun, SmokeSuite } from '../shared/types';
-import type { Language } from './i18n';
-import { Waterfall } from './waterfall';
-import { SmokeTransfer } from './smoke-transfer';
+import { useEffect, useState } from "react";
+import { db } from "../shared/db";
+import { newSmokeSuite, validateSmokeSuite } from "../shared/smoke";
+import { applySeoChecks, seoChecks } from "../shared/seo";
+import type {
+  Action,
+  SmokeCase,
+  SmokeCheckResult,
+  SmokeRun,
+  SmokeSuite,
+  SeoCheck,
+} from "../shared/types";
+import type { Language } from "./i18n";
+import { Waterfall } from "./waterfall";
+import { SmokeTransfer } from "./smoke-transfer";
 
 const text = {
-  pl: { suite: 'Smoke suite', base: 'Adres bazowy', blocked: 'Blokady zasobów', save: 'Zapisz suite', fresh: 'Nowy suite', checks: 'Scenariusze', add: '+ Dodaj scenariusz', run: 'Uruchom smoke testy', running: 'Testy trwają…', saved: 'Zapisane suite’y', history: 'Historia', name: 'Nazwa scenariusza', path: 'Ścieżka / URL', status: 'Status', visible: 'Widoczny tekst', selector: 'Selektor CSS', actions: 'Akcje po ładowaniu', optional: 'Opcjonalny', clear: 'Wyczyść historię', local: 'lokalne testy w przeglądarce', removeCase: 'Usuń scenariusz', removeSuite: 'Usuń zapisany zestaw', confirmRemove: 'Usunąć', suiteHint: 'Lokalna nazwa zestawu, np. „Pre-prod — krytyczne ścieżki”.', baseHint: 'Pełny adres bazowy z https://, np. https://test.example.com; ścieżki scenariuszy będą do niego dołączane.', blockedHint: 'Jeden wzorzec URL w linii, np. *://www.googletagmanager.com/*. Blokuj wyłącznie zasoby nieistotne dla scenariusza.', nameHint: 'Nazwa widoczna w historii, np. „Logowanie” lub „Koszyk”.', pathHint: 'Ścieżka względem adresu bazowego, np. /koszyk, albo pełny URL, np. https://test.example.com/koszyk.', statusHint: 'Oczekiwany kod HTTP głównego dokumentu, np. 200 dla strony lub 302 dla przekierowania.', visibleHint: 'Dosłowny tekst widoczny po akcjach, np. „Dziękujemy za zakup”. Puste pole wyłącza sprawdzenie.', selectorHint: 'Selektor CSS elementu, który musi istnieć, np. main, #root lub [data-testid="checkout"]. Puste pole wyłącza sprawdzenie.', clickHint: 'Selektor CSS elementu do kliknięcia, np. button#cookie-accept.', waitHint: 'Czas po ładowaniu w ms; np. 500 czeka pół sekundy. Dozwolone ≥ 0.', scrollXHint: 'Docelowa pozycja pozioma w px; zwykle 0.', scrollYHint: 'Docelowa pozycja pionowa w px; np. 500 przewija o 500 px od góry.', presets: 'Presety frameworków', nextPreset: '+ Next.js', reactPreset: '+ React', detected: 'Wykryto', unknown: 'nie wykryto frameworka', timeout: 'Timeout (ms)', timeoutHint: 'Maksymalny czas oczekiwania na element do kliknięcia w ms; np. 3000. Wartość 0 wykonuje jedną natychmiastową próbę.', removeAction: 'Usuń akcję' },
-  en: { suite: 'Smoke suite', base: 'Base URL', blocked: 'Blocked resources', save: 'Save suite', fresh: 'New suite', checks: 'Scenarios', add: '+ Add scenario', run: 'Run smoke tests', running: 'Tests running…', saved: 'Saved suites', history: 'History', name: 'Scenario name', path: 'Path / URL', status: 'Status', visible: 'Visible text', selector: 'CSS selector', actions: 'Actions after load', optional: 'Optional', clear: 'Clear history', local: 'local browser checks', removeCase: 'Remove scenario', removeSuite: 'Remove saved suite', confirmRemove: 'Remove', suiteHint: 'Local suite name, e.g. “Pre-prod — critical paths”.', baseHint: 'Complete base address with https://, e.g. https://test.example.com; scenario paths are appended to it.', blockedHint: 'One URL pattern per line, e.g. *://www.googletagmanager.com/*. Block only scenario-irrelevant resources.', nameHint: 'Name shown in history, e.g. “Login” or “Cart”.', pathHint: 'A base-relative path, e.g. /cart, or a complete URL, e.g. https://test.example.com/cart.', statusHint: 'Expected HTTP status for the main document, e.g. 200 for a page or 302 for a redirect.', visibleHint: 'Exact text that must be visible after actions, e.g. “Thank you for your order”. Leave empty to disable this check.', selectorHint: 'CSS selector that must exist, e.g. main, #root, or [data-testid="checkout"]. Leave empty to disable this check.', clickHint: 'CSS selector of the element to click, e.g. button#cookie-accept.', waitHint: 'Wait after load in ms; e.g. 500 waits half a second. Allowed value is ≥ 0.', scrollXHint: 'Target horizontal position in px; usually 0.', scrollYHint: 'Target vertical position in px; e.g. 500 scrolls 500 px from the top.', presets: 'Framework presets', nextPreset: '+ Next.js', reactPreset: '+ React', detected: 'Detected', unknown: 'no framework detected', timeout: 'Timeout (ms)', timeoutHint: 'Maximum wait for a clickable element in ms; e.g. 3000. A value of 0 makes one immediate attempt.', removeAction: 'Remove action' }
+  pl: {
+    suite: "Smoke suite",
+    base: "Adres bazowy",
+    blocked: "Blokady zasobów",
+    save: "Zapisz suite",
+    fresh: "Nowy suite",
+    checks: "Scenariusze",
+    add: "+ Dodaj scenariusz",
+    run: "Uruchom smoke testy",
+    running: "Testy trwają…",
+    saved: "Zapisane suite’y",
+    history: "Historia",
+    name: "Nazwa scenariusza",
+    path: "Ścieżka / URL",
+    status: "Status",
+    visible: "Widoczny tekst",
+    selector: "Selektor CSS",
+    actions: "Akcje po ładowaniu",
+    optional: "Opcjonalny",
+    clear: "Wyczyść historię",
+    local: "lokalne testy w przeglądarce",
+    removeCase: "Usuń scenariusz",
+    removeSuite: "Usuń zapisany zestaw",
+    confirmRemove: "Usunąć",
+    suiteHint: "Lokalna nazwa zestawu, np. „Pre-prod — krytyczne ścieżki”.",
+    baseHint:
+      "Pełny adres bazowy z https://, np. https://test.example.com; ścieżki scenariuszy będą do niego dołączane.",
+    blockedHint:
+      "Jeden wzorzec URL w linii, np. *://www.googletagmanager.com/*. Blokuj wyłącznie zasoby nieistotne dla scenariusza.",
+    nameHint: "Nazwa widoczna w historii, np. „Logowanie” lub „Koszyk”.",
+    pathHint:
+      "Ścieżka względem adresu bazowego, np. /koszyk, albo pełny URL, np. https://test.example.com/koszyk.",
+    statusHint:
+      "Oczekiwany kod HTTP głównego dokumentu, np. 200 dla strony lub 302 dla przekierowania.",
+    visibleHint:
+      "Dosłowny tekst widoczny po akcjach, np. „Dziękujemy za zakup”. Puste pole wyłącza sprawdzenie.",
+    selectorHint:
+      'Selektor CSS elementu, który musi istnieć, np. main, #root lub [data-testid="checkout"]. Puste pole wyłącza sprawdzenie.',
+    clickHint: "Selektor CSS elementu do kliknięcia, np. button#cookie-accept.",
+    waitHint:
+      "Czas po ładowaniu w ms; np. 500 czeka pół sekundy. Dozwolone ≥ 0.",
+    scrollXHint: "Docelowa pozycja pozioma w px; zwykle 0.",
+    scrollYHint:
+      "Docelowa pozycja pionowa w px; np. 500 przewija o 500 px od góry.",
+    presets: "Presety frameworków",
+    nextPreset: "+ Next.js",
+    reactPreset: "+ React",
+    detected: "Wykryto",
+    unknown: "nie wykryto frameworka",
+    timeout: "Timeout (ms)",
+    timeoutHint:
+      "Maksymalny czas oczekiwania na element do kliknięcia w ms; np. 3000. Wartość 0 wykonuje jedną natychmiastową próbę.",
+    removeAction: "Usuń akcję",
+  },
+  en: {
+    suite: "Smoke suite",
+    base: "Base URL",
+    blocked: "Blocked resources",
+    save: "Save suite",
+    fresh: "New suite",
+    checks: "Scenarios",
+    add: "+ Add scenario",
+    run: "Run smoke tests",
+    running: "Tests running…",
+    saved: "Saved suites",
+    history: "History",
+    name: "Scenario name",
+    path: "Path / URL",
+    status: "Status",
+    visible: "Visible text",
+    selector: "CSS selector",
+    actions: "Actions after load",
+    optional: "Optional",
+    clear: "Clear history",
+    local: "local browser checks",
+    removeCase: "Remove scenario",
+    removeSuite: "Remove saved suite",
+    confirmRemove: "Remove",
+    suiteHint: "Local suite name, e.g. “Pre-prod — critical paths”.",
+    baseHint:
+      "Complete base address with https://, e.g. https://test.example.com; scenario paths are appended to it.",
+    blockedHint:
+      "One URL pattern per line, e.g. *://www.googletagmanager.com/*. Block only scenario-irrelevant resources.",
+    nameHint: "Name shown in history, e.g. “Login” or “Cart”.",
+    pathHint:
+      "A base-relative path, e.g. /cart, or a complete URL, e.g. https://test.example.com/cart.",
+    statusHint:
+      "Expected HTTP status for the main document, e.g. 200 for a page or 302 for a redirect.",
+    visibleHint:
+      "Exact text that must be visible after actions, e.g. “Thank you for your order”. Leave empty to disable this check.",
+    selectorHint:
+      'CSS selector that must exist, e.g. main, #root, or [data-testid="checkout"]. Leave empty to disable this check.',
+    clickHint:
+      "CSS selector of the element to click, e.g. button#cookie-accept.",
+    waitHint:
+      "Wait after load in ms; e.g. 500 waits half a second. Allowed value is ≥ 0.",
+    scrollXHint: "Target horizontal position in px; usually 0.",
+    scrollYHint:
+      "Target vertical position in px; e.g. 500 scrolls 500 px from the top.",
+    presets: "Framework presets",
+    nextPreset: "+ Next.js",
+    reactPreset: "+ React",
+    detected: "Detected",
+    unknown: "no framework detected",
+    timeout: "Timeout (ms)",
+    timeoutHint:
+      "Maximum wait for a clickable element in ms; e.g. 3000. A value of 0 makes one immediate attempt.",
+    removeAction: "Remove action",
+  },
 };
 type Copy = typeof text.pl;
 
-function Card({ item, update, remove, t }: { item: SmokeCase; update: (next: Partial<SmokeCase>) => void; remove: () => void; t: Copy }) {
+const seoCopy: Record<Language, Record<SeoCheck, string>> = {
+  pl: {
+    title: "Meta title",
+    metaDescription: "Meta description",
+    canonical: "Canonical",
+    hreflang: "Hreflang",
+    robots: "Meta robots",
+    htmlLang: "Atrybut lang HTML",
+    h1: "Nagłówek H1",
+  },
+  en: {
+    title: "Meta title",
+    metaDescription: "Meta description",
+    canonical: "Canonical",
+    hreflang: "Hreflang",
+    robots: "Meta robots",
+    htmlLang: "HTML lang attribute",
+    h1: "H1 heading",
+  },
+};
+
+function Card({
+  item,
+  update,
+  remove,
+  t,
+  lang,
+}: {
+  item: SmokeCase;
+  update: (next: Partial<SmokeCase>) => void;
+  remove: () => void;
+  t: Copy;
+  lang: Language;
+}) {
   const actions = item.actions;
-  const patchAction = (index: number, action: Action) => update({ actions: actions.map((current, currentIndex) => currentIndex === index ? action : current) });
-  return <article className="smoke-card"><header><strong>{item.name || t.name}</strong><button title={t.removeCase} aria-label={t.removeCase} onClick={remove}>×</button></header>
-    <div className="smoke-fields"><label>{t.name}<input title={t.nameHint} value={item.name} onChange={event => update({ name: event.target.value })} /></label><label>{t.path}<input title={t.pathHint} value={item.path} onChange={event => update({ path: event.target.value })} /></label><label>{t.status}<input title={t.statusHint} type="number" value={item.expectedStatus} onChange={event => update({ expectedStatus: Number(event.target.value) || 200 })} /></label><label>{t.visible}<input title={t.visibleHint} value={item.expectedText ?? ''} onChange={event => update({ expectedText: event.target.value || undefined })} /></label><label>{t.selector}<input title={t.selectorHint} value={item.expectedSelector ?? ''} onChange={event => update({ expectedSelector: event.target.value || undefined })} /></label></div>
-    <details><summary>{t.actions} ({actions.length})</summary>{actions.map((action, index) => <div className="action" key={index}>{action.type === 'click' ? <><input aria-label={t.selector} title={t.clickHint} value={action.selector} placeholder="button[data-testid]" onChange={event => patchAction(index, { ...action, selector: event.target.value })} /><label className="check"><input title={t.timeoutHint} type="number" min="0" value={action.timeoutMs} onChange={event => patchAction(index, { ...action, timeoutMs: Number(event.target.value) || 0 })} />{t.timeout}</label><label className="check"><input type="checkbox" checked={action.optional ?? false} onChange={event => patchAction(index, { ...action, optional: event.target.checked })} />{t.optional}</label></> : action.type === 'wait' ? <label>{t.actions}<input title={t.waitHint} type="number" min="0" value={action.durationMs} onChange={event => patchAction(index, { ...action, durationMs: Number(event.target.value) || 0 })} /></label> : <><label>X<input title={t.scrollXHint} type="number" value={action.x} onChange={event => patchAction(index, { ...action, x: Number(event.target.value) || 0 })} /></label><label>Y<input title={t.scrollYHint} type="number" value={action.y} onChange={event => patchAction(index, { ...action, y: Number(event.target.value) || 0 })} /></label></>}<button title={t.removeAction} aria-label={t.removeAction} onClick={() => update({ actions: actions.filter((_, currentIndex) => currentIndex !== index) })}>×</button></div>)}<div className="button-row"><button onClick={() => update({ actions: [...actions, { type: 'click', selector: '', timeoutMs: 3000, optional: true }] })}>+ click</button><button onClick={() => update({ actions: [...actions, { type: 'wait', durationMs: 500 }] })}>+ wait</button><button onClick={() => update({ actions: [...actions, { type: 'scroll', x: 0, y: 500 }] })}>+ scroll</button></div></details>
-  </article>;
+  const patchAction = (index: number, action: Action) =>
+    update({
+      actions: actions.map((current, currentIndex) =>
+        currentIndex === index ? action : current,
+      ),
+    });
+  return (
+    <article className="smoke-card">
+      <header>
+        <strong>{item.name || t.name}</strong>
+        <button title={t.removeCase} aria-label={t.removeCase} onClick={remove}>
+          ×
+        </button>
+      </header>
+      <div className="smoke-fields">
+        <label>
+          {t.name}
+          <input
+            title={t.nameHint}
+            value={item.name}
+            onChange={(event) => update({ name: event.target.value })}
+          />
+        </label>
+        <label>
+          {t.path}
+          <input
+            title={t.pathHint}
+            value={item.path}
+            onChange={(event) => update({ path: event.target.value })}
+          />
+        </label>
+        <label>
+          {t.status}
+          <input
+            title={t.statusHint}
+            type="number"
+            value={item.expectedStatus}
+            onChange={(event) =>
+              update({ expectedStatus: Number(event.target.value) || 200 })
+            }
+          />
+        </label>
+        <label>
+          {t.visible}
+          <input
+            title={t.visibleHint}
+            value={item.expectedText ?? ""}
+            onChange={(event) =>
+              update({ expectedText: event.target.value || undefined })
+            }
+          />
+        </label>
+        <label>
+          {t.selector}
+          <input
+            title={t.selectorHint}
+            value={item.expectedSelector ?? ""}
+            onChange={(event) =>
+              update({ expectedSelector: event.target.value || undefined })
+            }
+          />
+        </label>
+      </div>
+      <details>
+        <summary>
+          {t.actions} ({actions.length})
+        </summary>
+        {actions.map((action, index) => (
+          <div className="action" key={index}>
+            {action.type === "click" ? (
+              <>
+                <input
+                  aria-label={t.selector}
+                  title={t.clickHint}
+                  value={action.selector}
+                  placeholder="button[data-testid]"
+                  onChange={(event) =>
+                    patchAction(index, {
+                      ...action,
+                      selector: event.target.value,
+                    })
+                  }
+                />
+                <label className="check">
+                  <input
+                    title={t.timeoutHint}
+                    type="number"
+                    min="0"
+                    value={action.timeoutMs}
+                    onChange={(event) =>
+                      patchAction(index, {
+                        ...action,
+                        timeoutMs: Number(event.target.value) || 0,
+                      })
+                    }
+                  />
+                  {t.timeout}
+                </label>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={action.optional ?? false}
+                    onChange={(event) =>
+                      patchAction(index, {
+                        ...action,
+                        optional: event.target.checked,
+                      })
+                    }
+                  />
+                  {t.optional}
+                </label>
+              </>
+            ) : action.type === "wait" ? (
+              <label>
+                {t.actions}
+                <input
+                  title={t.waitHint}
+                  type="number"
+                  min="0"
+                  value={action.durationMs}
+                  onChange={(event) =>
+                    patchAction(index, {
+                      ...action,
+                      durationMs: Number(event.target.value) || 0,
+                    })
+                  }
+                />
+              </label>
+            ) : (
+              <>
+                <label>
+                  X
+                  <input
+                    title={t.scrollXHint}
+                    type="number"
+                    value={action.x}
+                    onChange={(event) =>
+                      patchAction(index, {
+                        ...action,
+                        x: Number(event.target.value) || 0,
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Y
+                  <input
+                    title={t.scrollYHint}
+                    type="number"
+                    value={action.y}
+                    onChange={(event) =>
+                      patchAction(index, {
+                        ...action,
+                        y: Number(event.target.value) || 0,
+                      })
+                    }
+                  />
+                </label>
+              </>
+            )}
+            <button
+              title={t.removeAction}
+              aria-label={t.removeAction}
+              onClick={() =>
+                update({
+                  actions: actions.filter(
+                    (_, currentIndex) => currentIndex !== index,
+                  ),
+                })
+              }
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <div className="button-row">
+          <button
+            onClick={() =>
+              update({
+                actions: [
+                  ...actions,
+                  {
+                    type: "click",
+                    selector: "",
+                    timeoutMs: 3000,
+                    optional: true,
+                  },
+                ],
+              })
+            }
+          >
+            + click
+          </button>
+          <button
+            onClick={() =>
+              update({
+                actions: [...actions, { type: "wait", durationMs: 500 }],
+              })
+            }
+          >
+            + wait
+          </button>
+          <button
+            onClick={() =>
+              update({
+                actions: [...actions, { type: "scroll", x: 0, y: 500 }],
+              })
+            }
+          >
+            + scroll
+          </button>
+        </div>
+      </details>
+      <details>
+        <summary>
+          {lang === "pl"
+            ? `SEO (${item.seoChecks?.length ?? 0})`
+            : `SEO (${item.seoChecks?.length ?? 0})`}
+        </summary>
+        <div className="metric-options seo-options">
+          {seoChecks.map((check) => (
+            <label className="check" key={check}>
+              <input
+                type="checkbox"
+                checked={item.seoChecks?.includes(check) ?? false}
+                onChange={(event) =>
+                  update({
+                    seoChecks: event.target.checked
+                      ? [...(item.seoChecks ?? []), check]
+                      : (item.seoChecks ?? []).filter(
+                          (itemCheck) => itemCheck !== check,
+                        ),
+                  })
+                }
+              />
+              {seoCopy[lang][check]}
+            </label>
+          ))}
+        </div>
+      </details>
+    </article>
+  );
 }
 
 export function SmokePanelV2({ lang }: { lang: Language }) {
-  const t = text[lang]; const [suite, setSuite] = useState(newSmokeSuite()); const [suites, setSuites] = useState<SmokeSuite[]>([]); const [runs, setRuns] = useState<SmokeRun[]>([]); const [running, setRunning] = useState(false);
-  const reload = async () => { setSuites(await db.smokeSuites.list()); setRuns((await db.smokeRuns.list()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))); };
-  useEffect(() => { void reload(); }, []);
-  const patch = (value: Partial<SmokeSuite>) => setSuite(current => ({ ...current, ...value, updatedAt: new Date().toISOString() }));
-  const patchCase = (id: string, value: Partial<SmokeCase>) => patch({ cases: suite.cases.map(item => item.id === id ? { ...item, ...value } : item) });
-  const addCase = (preset?: 'nextjs' | 'react') => patch({ cases: [...suite.cases, preset === 'nextjs' ? { id: crypto.randomUUID(), name: 'Next.js app shell', path: '/', expectedStatus: 200, expectedSelector: '#__next', actions: [] } : preset === 'react' ? { id: crypto.randomUUID(), name: 'React app root', path: '/', expectedStatus: 200, expectedSelector: '#root', actions: [] } : { id: crypto.randomUUID(), name: '', path: '/', expectedStatus: 200, actions: [] }] });
-  const run = async () => { const errors = validateSmokeSuite(suite); if (errors.length) return alert(errors.join('\n')); setRunning(true); const results: SmokeCheckResult[] = []; try { for (const item of suite.cases) { const result = await chrome.runtime.sendMessage({ type: 'run-smoke-case', suite, case: item }) as SmokeCheckResult | { error: string }; results.push('error' in result ? { id: crypto.randomUUID(), caseId: item.id, caseName: item.name, url: suite.baseUrl, status: 'failed', durationMs: 0, failures: [result.error] } : result); } await db.smokeRuns.put({ id: crypto.randomUUID(), suiteId: suite.id, suiteName: suite.name, suiteSnapshot: structuredClone(suite), status: results.some(result => result.status === 'failed') ? 'failed' : 'passed', createdAt: new Date().toISOString(), results }); await reload(); } finally { setRunning(false); } };
-  return <section className="content smoke-v2"><div className="section-title"><h2>{t.suite}</h2><small>{t.local}</small></div><label>{t.suite}<input title={t.suiteHint} value={suite.name} onChange={event => patch({ name: event.target.value })} /></label><label>{t.base}<input title={t.baseHint} value={suite.baseUrl} onChange={event => patch({ baseUrl: event.target.value })} /></label><label>{t.blocked}<textarea title={t.blockedHint} value={suite.blockedPatterns.join('\n')} onChange={event => patch({ blockedPatterns: event.target.value.split('\n').filter(Boolean) })} /></label><div className="button-row"><button onClick={async () => { await db.smokeSuites.put(suite); await reload(); }}>{t.save}</button><button onClick={() => setSuite(newSmokeSuite())}>{t.fresh}</button></div><SmokeTransfer suite={suite} onImport={setSuite} /><h3>{t.checks}</h3><div className="preset-row"><small>{t.presets}</small><button title={t.selectorHint} onClick={() => addCase('nextjs')}>{t.nextPreset}</button><button title={t.selectorHint} onClick={() => addCase('react')}>{t.reactPreset}</button></div>{suite.cases.map(item => <Card key={item.id} item={item} t={t} update={value => patchCase(item.id, value)} remove={() => patch({ cases: suite.cases.filter(candidate => candidate.id !== item.id) })} />)}<button onClick={() => addCase()}>{t.add}</button><div className="run-box"><button className="primary" disabled={running} onClick={() => void run()}>{running ? t.running : t.run}</button></div><details><summary>{t.saved} ({suites.length})</summary>{suites.map(item => <div className="saved-suite" key={item.id}><button className="profile-link" onClick={() => setSuite(item)}>{item.name}</button><button title={t.removeSuite} aria-label={t.removeSuite} onClick={async () => { if (confirm(t.confirmRemove + ' ' + item.name + '?')) { await db.smokeSuites.delete(item.id); await reload(); } }}>×</button></div>)}</details><h3>{t.history}</h3>{runs.map(run => <article className="result" key={run.id}><strong>{run.status === 'passed' ? '✓' : '×'} {run.suiteName}</strong>{run.results.map(result => <details key={result.id}><summary>{result.caseName} · {result.framework && result.framework !== 'unknown' ? t.detected + ': ' + result.framework : t.unknown}</summary>{result.interactions?.map(interaction => <p key={interaction.action}>⚡ {interaction.action}: {interaction.durationMs} ms · {interaction.routeChanged ? 'route changed' : 'same route'} · {interaction.resources} resources · {Math.round(interaction.transferBytes / 1024)} KB</p>)}{result.failures.map(failure => <p key={failure}>{failure}</p>)}<Waterfall artifact={result.artifacts?.find(artifact => artifact.kind === 'har')} lang={lang} /></details>)}</article>)}<button className="danger" onClick={async () => { await db.smokeRuns.clear(); await reload(); }}>{t.clear}</button></section>;
+  const t = text[lang];
+  const [suite, setSuite] = useState(newSmokeSuite());
+  const [suites, setSuites] = useState<SmokeSuite[]>([]);
+  const [runs, setRuns] = useState<SmokeRun[]>([]);
+  const [running, setRunning] = useState(false);
+  const [selectedSeoChecks, setSelectedSeoChecks] = useState<SeoCheck[]>([
+    ...seoChecks,
+  ]);
+  const reload = async () => {
+    setSuites(await db.smokeSuites.list());
+    setRuns(
+      (await db.smokeRuns.list()).sort((a, b) =>
+        b.createdAt.localeCompare(a.createdAt),
+      ),
+    );
+  };
+  useEffect(() => {
+    void reload();
+  }, []);
+  const patch = (value: Partial<SmokeSuite>) =>
+    setSuite((current) => ({
+      ...current,
+      ...value,
+      updatedAt: new Date().toISOString(),
+    }));
+  const patchCase = (id: string, value: Partial<SmokeCase>) =>
+    patch({
+      cases: suite.cases.map((item) =>
+        item.id === id ? { ...item, ...value } : item,
+      ),
+    });
+  const addCase = (preset?: "nextjs" | "react") =>
+    patch({
+      cases: [
+        ...suite.cases,
+        preset === "nextjs"
+          ? {
+              id: crypto.randomUUID(),
+              name: "Next.js app shell",
+              path: "/",
+              expectedStatus: 200,
+              expectedSelector: "#__next",
+              actions: [],
+            }
+          : preset === "react"
+            ? {
+                id: crypto.randomUUID(),
+                name: "React app root",
+                path: "/",
+                expectedStatus: 200,
+                expectedSelector: "#root",
+                actions: [],
+              }
+            : {
+                id: crypto.randomUUID(),
+                name: "",
+                path: "/",
+                expectedStatus: 200,
+                actions: [],
+              },
+      ],
+    });
+  const run = async () => {
+    const errors = validateSmokeSuite(suite);
+    if (errors.length) return alert(errors.join("\n"));
+    setRunning(true);
+    const results: SmokeCheckResult[] = [];
+    try {
+      for (const item of suite.cases) {
+        const result = (await chrome.runtime.sendMessage({
+          type: "run-smoke-case",
+          suite,
+          case: item,
+        })) as SmokeCheckResult | { error: string };
+        results.push(
+          "error" in result
+            ? {
+                id: crypto.randomUUID(),
+                caseId: item.id,
+                caseName: item.name,
+                url: suite.baseUrl,
+                status: "failed",
+                durationMs: 0,
+                failures: [result.error],
+              }
+            : result,
+        );
+      }
+      await db.smokeRuns.put({
+        id: crypto.randomUUID(),
+        suiteId: suite.id,
+        suiteName: suite.name,
+        suiteSnapshot: structuredClone(suite),
+        status: results.some((result) => result.status === "failed")
+          ? "failed"
+          : "passed",
+        createdAt: new Date().toISOString(),
+        results,
+      });
+      await reload();
+    } finally {
+      setRunning(false);
+    }
+  };
+  return (
+    <section className="content smoke-v2">
+      <div className="section-title">
+        <h2>{t.suite}</h2>
+        <small>{t.local}</small>
+      </div>
+      <label>
+        {t.suite}
+        <input
+          title={t.suiteHint}
+          value={suite.name}
+          onChange={(event) => patch({ name: event.target.value })}
+        />
+      </label>
+      <label>
+        {t.base}
+        <input
+          title={t.baseHint}
+          value={suite.baseUrl}
+          onChange={(event) => patch({ baseUrl: event.target.value })}
+        />
+      </label>
+      <label>
+        {t.blocked}
+        <textarea
+          title={t.blockedHint}
+          value={suite.blockedPatterns.join("\n")}
+          onChange={(event) =>
+            patch({
+              blockedPatterns: event.target.value.split("\n").filter(Boolean),
+            })
+          }
+        />
+      </label>
+      <div className="button-row">
+        <button
+          onClick={async () => {
+            await db.smokeSuites.put(suite);
+            await reload();
+          }}
+        >
+          {t.save}
+        </button>
+        <button onClick={() => setSuite(newSmokeSuite())}>{t.fresh}</button>
+      </div>
+      <SmokeTransfer suite={suite} onImport={setSuite} />
+      <h3>{lang === "pl" ? "Import testów SEO" : "Import SEO checks"}</h3>
+      <p className="seo-hint">
+        {lang === "pl"
+          ? "Dodaj cały zestaw albo zaznaczone kontrole do wszystkich scenariuszy w tym suite."
+          : "Add the complete set or selected assertions to every scenario in this suite."}
+      </p>
+      <div className="metric-options seo-options">
+        {seoChecks.map((check) => (
+          <label className="check" key={check}>
+            <input
+              type="checkbox"
+              checked={selectedSeoChecks.includes(check)}
+              onChange={(event) =>
+                setSelectedSeoChecks((current) =>
+                  event.target.checked
+                    ? [...current, check]
+                    : current.filter((currentCheck) => currentCheck !== check),
+                )
+              }
+            />
+            {seoCopy[lang][check]}
+          </label>
+        ))}
+      </div>
+      <div className="button-row">
+        <button onClick={() => setSelectedSeoChecks([...seoChecks])}>
+          {lang === "pl" ? "Zaznacz wszystkie" : "Select all"}
+        </button>
+        <button onClick={() => setSelectedSeoChecks([])}>
+          {lang === "pl" ? "Odznacz wszystkie" : "Select none"}
+        </button>
+        <button
+          onClick={() => patch(applySeoChecks(suite, selectedSeoChecks))}
+          disabled={!selectedSeoChecks.length}
+        >
+          {lang === "pl"
+            ? "Dodaj zaznaczone do wszystkich scenariuszy"
+            : "Add selected to all scenarios"}
+        </button>
+      </div>
+      <h3>{t.checks}</h3>
+      <div className="preset-row">
+        <small>{t.presets}</small>
+        <button title={t.selectorHint} onClick={() => addCase("nextjs")}>
+          {t.nextPreset}
+        </button>
+        <button title={t.selectorHint} onClick={() => addCase("react")}>
+          {t.reactPreset}
+        </button>
+      </div>
+      {suite.cases.map((item) => (
+        <Card
+          key={item.id}
+          item={item}
+          t={t}
+          lang={lang}
+          update={(value) => patchCase(item.id, value)}
+          remove={() =>
+            patch({
+              cases: suite.cases.filter(
+                (candidate) => candidate.id !== item.id,
+              ),
+            })
+          }
+        />
+      ))}
+      <button onClick={() => addCase()}>{t.add}</button>
+      <div className="run-box">
+        <button
+          className="primary"
+          disabled={running}
+          onClick={() => void run()}
+        >
+          {running ? t.running : t.run}
+        </button>
+      </div>
+      <details>
+        <summary>
+          {t.saved} ({suites.length})
+        </summary>
+        {suites.map((item) => (
+          <div className="saved-suite" key={item.id}>
+            <button className="profile-link" onClick={() => setSuite(item)}>
+              {item.name}
+            </button>
+            <button
+              title={t.removeSuite}
+              aria-label={t.removeSuite}
+              onClick={async () => {
+                if (confirm(t.confirmRemove + " " + item.name + "?")) {
+                  await db.smokeSuites.delete(item.id);
+                  await reload();
+                }
+              }}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </details>
+      <h3>{t.history}</h3>
+      {runs.map((run) => (
+        <article className="result" key={run.id}>
+          <strong>
+            {run.status === "passed" ? "✓" : "×"} {run.suiteName}
+          </strong>
+          {run.results.map((result) => (
+            <details key={result.id}>
+              <summary>
+                {result.caseName} ·{" "}
+                {result.framework && result.framework !== "unknown"
+                  ? t.detected + ": " + result.framework
+                  : t.unknown}
+              </summary>
+              {result.interactions?.map((interaction) => (
+                <p key={interaction.action}>
+                  ⚡ {interaction.action}: {interaction.durationMs} ms ·{" "}
+                  {interaction.routeChanged ? "route changed" : "same route"} ·{" "}
+                  {interaction.resources} resources ·{" "}
+                  {Math.round(interaction.transferBytes / 1024)} KB
+                </p>
+              ))}
+              {result.failures.map((failure) => (
+                <p key={failure}>{failure}</p>
+              ))}
+              <Waterfall
+                artifact={result.artifacts?.find(
+                  (artifact) => artifact.kind === "har",
+                )}
+                lang={lang}
+              />
+            </details>
+          ))}
+        </article>
+      ))}
+      <button
+        className="danger"
+        onClick={async () => {
+          await db.smokeRuns.clear();
+          await reload();
+        }}
+      >
+        {t.clear}
+      </button>
+    </section>
+  );
 }

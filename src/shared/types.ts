@@ -1,10 +1,10 @@
-export type Engine = 'browser' | 'fetch';
-export type Aggregate = 'p50' | 'median' | 'p75' | 'p90';
-export type SeriesKind = 'before' | 'after' | 'custom';
+export type Engine = "browser" | "fetch";
+export type Aggregate = "p50" | "median" | "p75" | "p90";
+export type SeriesKind = "before" | "after" | "custom";
 export type Action =
-  | { type: 'click'; selector: string; timeoutMs: number; optional?: boolean }
-  | { type: 'wait'; durationMs: number }
-  | { type: 'scroll'; x: number; y: number };
+  | { type: "click"; selector: string; timeoutMs: number; optional?: boolean }
+  | { type: "wait"; durationMs: number }
+  | { type: "scroll"; x: number; y: number };
 
 export interface Thresholds {
   /** Maximum allowed aggregate value in milliseconds. */
@@ -28,7 +28,12 @@ export interface TestProfile {
   actions: Action[];
   network?: { downloadKbps: number; uploadKbps: number; latencyMs: number };
   cpuSlowdown?: number;
-  viewport?: { width: number; height: number; deviceScaleFactor: number; mobile: boolean };
+  viewport?: {
+    width: number;
+    height: number;
+    deviceScaleFactor: number;
+    mobile: boolean;
+  };
   /** Unrecorded attempts used to stabilise a test environment before measured runs. */
   warmupRuns: number;
   /** Pause between completed attempts, in milliseconds. */
@@ -56,7 +61,7 @@ export interface Metrics {
 }
 
 export interface Artifact {
-  kind: 'har' | 'trace' | 'debug' | 'screenshot';
+  kind: "har" | "trace" | "debug" | "screenshot";
   filename: string;
   mimeType: string;
   content: string;
@@ -96,8 +101,18 @@ export interface SmokeCase {
   expectedStatus: number;
   expectedText?: string;
   expectedSelector?: string;
+  seoChecks?: SeoCheck[];
   actions: Action[];
 }
+
+export type SeoCheck =
+  | "title"
+  | "metaDescription"
+  | "canonical"
+  | "hreflang"
+  | "robots"
+  | "htmlLang"
+  | "h1";
 
 export interface SmokeSuite {
   id: string;
@@ -115,12 +130,18 @@ export interface SmokeCheckResult {
   caseId: string;
   caseName: string;
   url: string;
-  status: 'passed' | 'failed';
+  status: "passed" | "failed";
   durationMs: number;
   actualStatus?: number;
-  framework?: 'nextjs' | 'react' | 'unknown';
+  framework?: "nextjs" | "react" | "unknown";
   /** Timing and network delta for SPA interactions such as router navigation. */
-  interactions?: { action: string; durationMs: number; routeChanged: boolean; resources: number; transferBytes: number }[];
+  interactions?: {
+    action: string;
+    durationMs: number;
+    routeChanged: boolean;
+    resources: number;
+    transferBytes: number;
+  }[];
   failures: string[];
   artifacts?: Artifact[];
 }
@@ -130,8 +151,7 @@ export interface SmokeRun {
   suiteId: string;
   suiteName: string;
   suiteSnapshot: SmokeSuite;
-  status: 'passed' | 'failed' | 'stopped';
+  status: "passed" | "failed" | "stopped";
   createdAt: string;
   results: SmokeCheckResult[];
 }
-
