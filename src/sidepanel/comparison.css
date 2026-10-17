@@ -1,0 +1,55 @@
+.comparison-table {
+  margin: 10px 0;
+  overflow: auto;
+  border: 1px solid #d7e2ee;
+  border-radius: 7px;
+}
+
+.comparison-table table {
+  margin: 0;
+  min-width: 520px;
+  font-size: 11px;
+}
+.comparison-table th,
+.comparison-table td {
+  padding: 7px 8px;
+  max-width: none;
+}
+.comparison-table thead {
+  background: #edf4ff;
+  color: #1e5f9f;
+}
+.comparison-table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+.comparison-table small {
+  padding: 8px;
+  line-height: 1.35;
+  background: #f8fafc;
+}
+
+.quality-good {
+  background: #dcfce7 !important;
+  color: #166534;
+}
+.quality-needs-improvement {
+  background: #fef3c7 !important;
+  color: #92400e;
+}
+.quality-poor {
+  background: #fee2e2 !important;
+  color: #b42318;
+}
+.comparison-better {
+  background: #dcfce7;
+  color: #166534;
+  font-weight: 800;
+}
+.comparison-worse {
+  background: #fee2e2;
+  color: #b42318;
+  font-weight: 800;
+}
+.comparison-unchanged {
+  color: #64748b;
+}

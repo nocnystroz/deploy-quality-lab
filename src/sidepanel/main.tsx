@@ -15,6 +15,7 @@ import {
   type HistoryMetric,
 } from "../shared/export";
 import { medianRun, summarize, thresholdFailures } from "../shared/statistics";
+import { comparisonTone, qualityRating } from "../shared/metric-quality";
 import { validateProfile } from "../shared/validation";
 import type {
   Action,
@@ -23,11 +24,13 @@ import type {
   SeriesKind,
   TestProfile,
   TestRun,
+  Metrics,
 } from "../shared/types";
 import { copy, type Language } from "./i18n";
 import { SmokePanelV2 } from "./smoke-panel-v2";
 import { Waterfall } from "./waterfall";
 import "./style.css";
+import "./comparison.css";
 
 function parseLines(value: string): string[] {
   return value
@@ -73,15 +76,55 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 function format(ms?: number): string {
   return typeof ms === "number" ? `${Math.round(ms)} ms` : "—";
 }
-function delta(current?: number, baseline?: number): string | undefined {
-  if (
-    typeof current !== "number" ||
-    typeof baseline !== "number" ||
+type ComparedMetric = keyof Metrics | "postTtfbMs";
+const comparedMetrics: { key: ComparedMetric; label: string }[] = [
+  { key: "totalMs", label: "Total" },
+  { key: "ttfbMs", label: "TTFB" },
+  { key: "postTtfbMs", label: "Total − TTFB" },
+  { key: "domContentLoadedMs", label: "DOMContentLoaded" },
+  { key: "loadMs", label: "Load" },
+  { key: "fcpMs", label: "FCP" },
+  { key: "lcpMs", label: "LCP" },
+  { key: "cls", label: "CLS" },
+  { key: "inpMs", label: "INP" },
+];
+function metricValue(
+  summary: Metrics | undefined,
+  key: ComparedMetric,
+): number | undefined {
+  if (!summary) return undefined;
+  if (key === "postTtfbMs")
+    return typeof summary.totalMs === "number" &&
+      typeof summary.ttfbMs === "number"
+      ? summary.totalMs - summary.ttfbMs
+      : undefined;
+  return summary[key];
+}
+function formatMetric(key: ComparedMetric, value?: number): string {
+  if (key === "cls") return typeof value === "number" ? value.toFixed(3) : "—";
+  return format(value);
+}
+function formatDifference(
+  key: ComparedMetric,
+  current?: number,
+  baseline?: number,
+): string {
+  if (typeof current !== "number" || typeof baseline !== "number") return "—";
+  const difference = current - baseline;
+  const sign = difference > 0 ? "+" : "";
+  const absolute =
+    key === "cls"
+      ? `${sign}${difference.toFixed(3)}`
+      : `${sign}${Math.round(difference)} ms`;
+  const relative =
     baseline === 0
-  )
-    return undefined;
-  const percentage = ((current - baseline) / baseline) * 100;
-  return `${percentage > 0 ? "+" : ""}${percentage.toFixed(1)}%`;
+      ? ""
+      : ` (${sign}${((difference / baseline) * 100).toFixed(1)}%)`;
+  return `${absolute}${relative}`;
+}
+function qualityClass(metric: keyof Metrics, value?: number): string {
+  const rating = qualityRating(metric, value);
+  return rating ? `quality-${rating}` : "";
 }
 function placeTooltip(icon: HTMLElement) {
   const rect = icon.getBoundingClientRect();
@@ -264,6 +307,63 @@ function RunSpread({
           </div>
         ),
       )}
+    </div>
+  );
+}
+
+function ComparisonTable({
+  baseline,
+  current,
+  language,
+}: {
+  baseline?: Metrics;
+  current?: Metrics;
+  language: Language;
+}) {
+  const labels =
+    language === "pl"
+      ? ["Wskaźnik", "Przed", "Po", "Różnica"]
+      : ["Metric", "Before", "After", "Difference"];
+  return (
+    <div
+      className="comparison-table"
+      aria-label={
+        language === "pl" ? "Porównanie wyników" : "Result comparison"
+      }
+    >
+      <table>
+        <thead>
+          <tr>
+            {labels.map((label) => (
+              <th key={label}>{label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {comparedMetrics.map(({ key, label }) => {
+            const before = metricValue(baseline, key);
+            const after = metricValue(current, key);
+            const tone = comparisonTone(after, before);
+            const quality =
+              key === "postTtfbMs" ? "" : qualityClass(key, after);
+            return (
+              <tr key={key}>
+                <th>{label}</th>
+                <td>{formatMetric(key, before)}</td>
+                <td className={quality}>{formatMetric(key, after)}</td>
+                <td className={tone ? `comparison-${tone}` : ""}>
+                  {formatDifference(key, after, before)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <small>
+        {language === "pl"
+          ? "Kolor wartości: zielony — dobry, bursztynowy — wymaga poprawy, czerwony — słaby (progi CWV). Kolor różnicy: zielony — poprawa, czerwony — regresja."
+          : "Value colour: green — good, amber — needs improvement, red — poor (CWV thresholds). Difference colour: green — improvement, red — regression."}
+      </small>
     </div>
   );
 }
@@ -1394,21 +1494,11 @@ function App() {
                       (candidate) => candidate.id === item.referenceSeriesId,
                     )
                   : undefined;
-                const totalChange = delta(
-                  item.summary?.totalMs,
-                  reference?.summary?.totalMs,
-                );
                 const postTtfb =
                   typeof item.summary?.totalMs === "number" &&
                   typeof item.summary?.ttfbMs === "number"
                     ? item.summary.totalMs - item.summary.ttfbMs
                     : undefined;
-                const referencePostTtfb =
-                  typeof reference?.summary?.totalMs === "number" &&
-                  typeof reference?.summary?.ttfbMs === "number"
-                    ? reference.summary.totalMs - reference.summary.ttfbMs
-                    : undefined;
-                const postTtfbChange = delta(postTtfb, referencePostTtfb);
                 return (
                   <article className="result" key={item.id}>
                     <div>
@@ -1418,62 +1508,57 @@ function App() {
                         {new Date(item.createdAt).toLocaleString(lang)}
                       </small>
                     </div>
-                    <div className="metric-grid">
-                      <span>
-                        <small>{t.metricTotal}</small>
-                        {format(item.summary?.totalMs)}
-                      </span>
-                      <span>
-                        <small>{t.metricTtfb}</small>
-                        {format(item.summary?.ttfbMs)}
-                      </span>
-                      <span>
-                        <small>{t.postTtfb}</small>
-                        {format(postTtfb)}
-                      </span>
-                      <span>
-                        <small>{t.metricFcp}</small>
-                        {format(item.summary?.fcpMs)}
-                      </span>
-                      <span>
-                        <small>{t.metricLcp}</small>
-                        {format(item.summary?.lcpMs)}
-                      </span>
-                      <span>
-                        <small>{t.metricCls}</small>
-                        {item.summary?.cls?.toFixed(3) ?? "—"}
-                      </span>
-                      <span>
-                        <small>{t.metricInp}</small>
-                        {format(item.summary?.inpMs)}
-                      </span>
-                    </div>
+                    {!reference && (
+                      <div className="metric-grid">
+                        <span>
+                          <small>{t.metricTotal}</small>
+                          {format(item.summary?.totalMs)}
+                        </span>
+                        <span
+                          className={qualityClass(
+                            "ttfbMs",
+                            item.summary?.ttfbMs,
+                          )}
+                        >
+                          <small>{t.metricTtfb}</small>
+                          {format(item.summary?.ttfbMs)}
+                        </span>
+                        <span>
+                          <small>{t.postTtfb}</small>
+                          {format(postTtfb)}
+                        </span>
+                        <span
+                          className={qualityClass("fcpMs", item.summary?.fcpMs)}
+                        >
+                          <small>{t.metricFcp}</small>
+                          {format(item.summary?.fcpMs)}
+                        </span>
+                        <span
+                          className={qualityClass("lcpMs", item.summary?.lcpMs)}
+                        >
+                          <small>{t.metricLcp}</small>
+                          {format(item.summary?.lcpMs)}
+                        </span>
+                        <span
+                          className={qualityClass("cls", item.summary?.cls)}
+                        >
+                          <small>{t.metricCls}</small>
+                          {item.summary?.cls?.toFixed(3) ?? "—"}
+                        </span>
+                        <span
+                          className={qualityClass("inpMs", item.summary?.inpMs)}
+                        >
+                          <small>{t.metricInp}</small>
+                          {format(item.summary?.inpMs)}
+                        </span>
+                      </div>
+                    )}
                     {reference && (
-                      <>
-                        {totalChange && (
-                          <p
-                            className={
-                              totalChange.startsWith("+")
-                                ? "failure"
-                                : "success"
-                            }
-                          >
-                            {t.comparedWith} Total: {totalChange}
-                          </p>
-                        )}
-                        {postTtfbChange && (
-                          <p
-                            className={
-                              postTtfbChange.startsWith("+")
-                                ? "failure"
-                                : "success"
-                            }
-                          >
-                            {t.comparedWith} {t.postTtfb}: {postTtfbChange} (
-                            {format(postTtfb)} / {format(referencePostTtfb)})
-                          </p>
-                        )}
-                      </>
+                      <ComparisonTable
+                        baseline={reference.summary}
+                        current={item.summary}
+                        language={lang}
+                      />
                     )}
                     <p
                       className={
