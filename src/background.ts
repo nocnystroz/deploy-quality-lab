@@ -5,6 +5,10 @@ import type { TestProfile, TestRun } from './shared/types';
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'open-detached-window') {
+    chrome.windows.create({ url: chrome.runtime.getURL('src/sidepanel/index.html'), type: 'popup', width: 460, height: 820 }).then(window => sendResponse({ ok: true, windowId: window.id })).catch(error => sendResponse({ ok: false, error: String(error) }));
+    return true;
+  }
   if (message.type === 'run-browser') {
     runBrowser(message.profile as TestProfile, message.url, message.index).then(sendResponse).catch(error => sendResponse({ error: String(error) }));
     return true;

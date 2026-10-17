@@ -54,7 +54,7 @@ function App() {
   const deleteProfile = async (item: TestProfile) => { if (!confirm(`${t.delete} “${item.name}”?`)) return; await db.profiles.delete(item.id); if (item.id === profile.id) setProfile(newProfile()); await reload(); };
   const visibleSeries = series.filter(item => `${item.label} ${item.profileName} ${item.kind}`.toLocaleLowerCase().includes(historyFilter.toLocaleLowerCase()));
   return <main>
-    <header><div><b>Deploy Speed</b><small>local performance lab</small></div><select aria-label="Language" value={lang} onChange={e => setLang(e.target.value as Language)}><option value="pl">PL</option><option value="en">EN</option></select></header>
+    <header><div><b>Deploy Speed</b><small>local performance lab</small></div><div className="header-actions"><button title={t.detached} onClick={() => void chrome.runtime.sendMessage({ type: 'open-detached-window' })}>↗</button><select aria-label="Language" value={lang} onChange={e => setLang(e.target.value as Language)}><option value="pl">PL</option><option value="en">EN</option></select></div></header>
     <nav><button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>{t.profiles}</button><button className={tab === 'results' ? 'active' : ''} onClick={() => setTab('results')}>{t.results} <em>{series.length}</em></button></nav>
     {tab === 'profile' ? <section className="content">
       <label>{t.profileName}<input value={profile.name} onChange={e => patch({ name: e.target.value })} /></label>
