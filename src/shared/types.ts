@@ -74,6 +74,8 @@ export interface Series {
   id: string;
   profileId: string;
   profileName: string;
+  /** Immutable test configuration used to create this series. */
+  profileSnapshot: TestProfile;
   kind: SeriesKind;
   label: string;
   createdAt: string;

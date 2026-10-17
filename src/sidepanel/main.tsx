@@ -45,7 +45,7 @@ function App() {
         if (response.ok && kept) kept.artifacts = [...(kept.artifacts ?? []), { kind: 'lighthouse', filename: 'lighthouse.html', mimeType: 'text/html', content: String(response.data?.report ?? response.data) }];
         else if (debug) console.warn(response.error);
       }
-      const item: Series = { id: crypto.randomUUID(), profileId: profile.id, profileName: profile.name, kind, label: label || (kind === 'before' ? t.before : kind === 'after' ? t.after : 'Test'), createdAt: new Date().toISOString(), runs, aggregate: profile.aggregate, summary, thresholdFailures: thresholdFailures(summary, profile.thresholds, reference), referenceSeriesId: reference?.id };
+      const item: Series = { id: crypto.randomUUID(), profileId: profile.id, profileName: profile.name, profileSnapshot: structuredClone(executionProfile), kind, label: label || (kind === 'before' ? t.before : kind === 'after' ? t.after : 'Test'), createdAt: new Date().toISOString(), runs, aggregate: profile.aggregate, summary, thresholdFailures: thresholdFailures(summary, profile.thresholds, reference), referenceSeriesId: reference?.id };
       await db.series.put(item); await db.profiles.put(profile); setTab('results'); await reload();
     } finally { setRunning(false); }
   };
