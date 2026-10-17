@@ -5,6 +5,7 @@ import type { TestRun } from './types';
 describe('statistics', () => {
   it('calculates median and percentile without mutating input', () => {
     expect(aggregateValue([100, 300, 200, 400], 'median')).toBe(250);
+    expect(aggregateValue([100, 300, 200, 400], 'p50')).toBe(250);
     expect(aggregateValue([100, 200, 300, 400], 'p75')).toBe(325);
   });
   it('summarizes only successful runs', () => {

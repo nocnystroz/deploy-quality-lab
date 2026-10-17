@@ -1,5 +1,5 @@
 export type Engine = 'browser' | 'fetch';
-export type Aggregate = 'median' | 'p75' | 'p90';
+export type Aggregate = 'p50' | 'median' | 'p75' | 'p90';
 export type SeriesKind = 'before' | 'after' | 'custom';
 export type Action =
   | { type: 'click'; selector: string; timeoutMs: number; optional?: boolean }

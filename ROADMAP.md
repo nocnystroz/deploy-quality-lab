@@ -9,7 +9,7 @@ Lokalne rozszerzenie Chrome do powtarzalnego porównywania jakości wdrożenia p
 ### Pomiary wydajności
 
 - Profile wielu URL-i, etykiety „przed zmianą”, „po zmianie” i własne etykiety.
-- Dowolna liczba runów, warm-upy, mediana, P75 albo P90.
+- Dowolna liczba runów, warm-upy, P50 (domyślnie), mediana, P75 albo P90.
 - Dwa lokalne silniki: pełne ładowanie Chrome z CWV oraz HTTP request (fetch).
 - TTFB, total time, DOMContentLoaded, load, FCP, LCP, CLS, INP, transfer i status HTTP, zależnie od silnika.
 - Porównanie z baseline, procentowe delty oraz delta czasu po odjęciu TTFB.

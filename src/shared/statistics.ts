@@ -9,7 +9,7 @@ export function percentile(values: number[], p: number): number | undefined {
 }
 
 export function aggregateValue(values: number[], aggregate: Aggregate): number | undefined {
-  return percentile(values, aggregate === 'median' ? .5 : aggregate === 'p75' ? .75 : .9);
+  return percentile(values, aggregate === 'p50' || aggregate === 'median' ? .5 : aggregate === 'p75' ? .75 : .9);
 }
 
 export function summarize(runs: TestRun[], aggregate: Aggregate): Metrics | undefined {
