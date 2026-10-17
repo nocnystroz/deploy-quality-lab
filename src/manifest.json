@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Deploy Speed Tester",
+  "version": "0.1.0",
+  "description": "Lokalne porównywanie wydajności przed i po wdrożeniu.",
+  "permissions": ["sidePanel", "storage", "tabs", "debugger", "scripting", "nativeMessaging", "downloads"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "src/background.ts", "type": "module" },
+  "action": { "default_title": "Deploy Speed Tester" },
+  "side_panel": { "default_path": "src/sidepanel/index.html" }
+}

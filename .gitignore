@@ -1,0 +1,7 @@
+node_modules/
+dist/
+companion/node_modules/
+companion/com.deploy_speed_tester.host.json
+companion/launch-host.sh
+companion/launch-host.cmd
+npm-debug.log*
