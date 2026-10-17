@@ -41,6 +41,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
   if (message.type === 'start-selector-picker') { startSelectorPicker().then(sendResponse).catch(error => sendResponse({ ok: false, error: String(error) })); return true; }
+  if (message.type === 'use-current-url') { pickerTabId().then(async tabId => { if (!tabId) return { ok: false, error: 'Nie znaleziono aktywnej karty strony.' }; const tab = await chrome.tabs.get(tabId); if (!tab.url || !/^https?:\/\//.test(tab.url)) return { ok: false, error: 'Bieżąca karta nie ma adresu http:// lub https://.' }; return { ok: true, url: tab.url }; }).then(sendResponse).catch(error => sendResponse({ ok: false, error: String(error) })); return true; }
   if (message.type === 'run-browser') {
     runBrowser(message.profile as TestProfile, message.url, message.index).then(sendResponse).catch(error => sendResponse({ error: String(error) }));
     return true;

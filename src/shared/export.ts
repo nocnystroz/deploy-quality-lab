@@ -35,41 +35,42 @@ export async function historyXlsx(series: Series[], metrics: HistoryMetric[]): P
   return zipSync(files, { level: 6 }).buffer as ArrayBuffer;
 }
 
-/** Compact local PDF with selected aggregate metrics and simple per-metric plots. */
+type ChartMode = 'comparison' | 'trend';
+const orderedHistory = (series: Series[]) => [...series].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+const chartMode = (series: Series[]): ChartMode => series.length <= 2 ? 'comparison' : 'trend';
+const chartLabel = (item: Series, index: number) => `${item.label || `#${index + 1}`}`.slice(0, 16);
+const numericValues = (series: Series[], metric: HistoryMetric) => series.flatMap((item, index) => typeof item.summary?.[metric] === 'number' ? [{ item, index, value: item.summary[metric] as number }] : []);
+
+/** Compact local PDF. A comparison uses bars; 3+ historical series use a chronological trend. */
 export async function historyPdf(series: Series[], metrics: HistoryMetric[]): Promise<ArrayBuffer> {
-  const { jsPDF } = await import('jspdf'); const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-  pdf.setFontSize(16); pdf.text('Deploy Speed Tester — history', 40, 42);
-  pdf.setFontSize(9); pdf.text(`Generated locally · ${series.length} series`, 40, 58);
+  const ordered = orderedHistory(series); const mode = chartMode(ordered); const { jsPDF } = await import('jspdf'); const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+  pdf.setFontSize(16); pdf.text('Deploy Quality Lab — history', 40, 42); pdf.setFontSize(9); pdf.text(`Generated locally · ${ordered.length} series · ${mode === 'comparison' ? 'comparison bars' : 'chronological trend'}`, 40, 58);
   let y = 84;
   for (const metric of metrics) {
-    const values = series.map(item => item.summary?.[metric]).filter((value): value is number => typeof value === 'number');
-    if (!values.length) continue;
-    if (y > 690) { pdf.addPage(); y = 42; }
-    const max = Math.max(...values, 1); const x = 48; const width = 490; const height = 72;
-    pdf.setFontSize(11); pdf.text(metric, 40, y); y += 10;
-    pdf.setDrawColor(203, 213, 225); pdf.line(x, y + height, x + width, y + height);
-    pdf.setDrawColor(40, 100, 109); pdf.setLineWidth(1.5);
-    values.forEach((value, index) => { const px = values.length === 1 ? x + width / 2 : x + index * width / (values.length - 1); const py = y + height - value / max * height; if (index) { const previous = values[index - 1]; const previousX = values.length === 1 ? x + width / 2 : x + (index - 1) * width / (values.length - 1); const previousY = y + height - previous / max * height; pdf.line(previousX, previousY, px, py); } pdf.circle(px, py, 1.5, 'F'); });
-    pdf.setFontSize(8); pdf.setTextColor(71, 85, 105); pdf.text(`max: ${max}`, x + width + 8, y + 8); pdf.setTextColor(0, 0, 0); y += height + 30;
+    const values = numericValues(ordered, metric); if (!values.length) continue;
+    const x = 48; const width = 490; const height = 82; if (y + height + 42 > 760) { pdf.addPage(); y = 42; }
+    const max = Math.max(...values.map(item => item.value), 1); pdf.setFontSize(11); pdf.text(metric, 40, y); y += 12; pdf.setDrawColor(203, 213, 225); pdf.line(x, y + height, x + width, y + height);
+    if (mode === 'comparison') {
+      const slot = width / values.length; const barWidth = Math.min(110, slot * 0.58); pdf.setFillColor(25, 118, 210);
+      values.forEach(({ item, index, value }) => { const barHeight = value / max * height; const barX = x + index * slot + (slot - barWidth) / 2; pdf.rect(barX, y + height - barHeight, barWidth, barHeight, 'F'); pdf.setFontSize(8); pdf.setTextColor(52, 73, 94); pdf.text(String(Math.round(value)), barX + barWidth / 2, y + height - barHeight - 4, { align: 'center' }); pdf.text(chartLabel(item, index), barX + barWidth / 2, y + height + 12, { align: 'center', maxWidth: slot - 4 }); });
+    } else {
+      pdf.setDrawColor(25, 118, 210); pdf.setLineWidth(1.5); values.forEach(({ item, index, value }, pointIndex) => { const px = values.length === 1 ? x + width / 2 : x + pointIndex * width / (values.length - 1); const py = y + height - value / max * height; if (pointIndex) { const previous = values[pointIndex - 1]; const previousX = x + (pointIndex - 1) * width / (values.length - 1); const previousY = y + height - previous.value / max * height; pdf.line(previousX, previousY, px, py); } pdf.setFillColor(25, 118, 210); pdf.circle(px, py, 2, 'F'); pdf.setFontSize(7); pdf.setTextColor(52, 73, 94); pdf.text(chartLabel(item, index), px, y + height + 12, { align: 'center', maxWidth: 58 }); });
+    }
+    pdf.setTextColor(0, 0, 0); y += height + 32;
   }
-  return pdf.output('arraybuffer');
+  return pdf.output('arraybuffer') as ArrayBuffer;
 }
 
-/** A portable HTML report containing one SVG line chart per selected metric. */
-export function historyChartsHtml(series: Series[], metrics: HistoryMetric[], title = 'Deploy Speed Tester'): string {
-  const charts = metrics.map(metric => {
-    const values = series.map(item => item.summary?.[metric]).filter((value): value is number => typeof value === 'number');
-    if (!values.length) return `<section><h2>${esc(metric)}</h2><p>No data.</p></section>`;
-    const max = Math.max(...values, 1); const width = 720; const height = 200;
-    const points = series.map((item, index) => {
-      const value = item.summary?.[metric]; if (typeof value !== 'number') return '';
-      const x = series.length === 1 ? width / 2 : index * width / (series.length - 1); const y = height - value / max * (height - 24) - 12;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).filter(Boolean).join(' ');
-    const labels = series.map((item, index) => `<text x="${series.length === 1 ? width / 2 : index * width / (series.length - 1)}" y="196" text-anchor="middle">${esc(item.label).slice(0, 14)}</text>`).join('');
-    return `<section><h2>${esc(metric)}</h2><p>Max: ${max}</p><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(metric)} chart"><line x1="0" y1="188" x2="${width}" y2="188" stroke="#cbd5e1"/><polyline points="${points}" fill="none" stroke="#28646d" stroke-width="3"/>${labels}</svg></section>`;
+/** Portable HTML charts: bars compare one/two series, lines show a larger historical trend. */
+export function historyChartsHtml(series: Series[], metrics: HistoryMetric[], title = 'Deploy Quality Lab'): string {
+  const ordered = orderedHistory(series); const mode = chartMode(ordered); const charts = metrics.map(metric => {
+    const values = numericValues(ordered, metric); if (!values.length) return `<section><h2>${esc(metric)}</h2><p>No data.</p></section>`;
+    const max = Math.max(...values.map(item => item.value), 1); const width = 720; const height = 220; const base = 188;
+    const labels = values.map(({ item, index }, pointIndex) => `<text x="${mode === 'comparison' ? (pointIndex + .5) * width / values.length : values.length === 1 ? width / 2 : pointIndex * width / (values.length - 1)}" y="211" text-anchor="middle">${esc(chartLabel(item, index))}</text>`).join('');
+    const shape = mode === 'comparison' ? values.map(({ value }, index) => { const slot = width / values.length; const barWidth = Math.min(150, slot * .58); const barHeight = value / max * 164; const barX = index * slot + (slot - barWidth) / 2; return `<rect x="${barX.toFixed(1)}" y="${(base - barHeight).toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barHeight.toFixed(1)}" rx="3" fill="#1976d2"/><text x="${(barX + barWidth / 2).toFixed(1)}" y="${(base - barHeight - 6).toFixed(1)}" text-anchor="middle">${Math.round(value)}</text>`; }).join('') : `<polyline points="${values.map(({ value }, index) => `${values.length === 1 ? width / 2 : index * width / (values.length - 1)},${(base - value / max * 164).toFixed(1)}`).join(' ')}" fill="none" stroke="#1976d2" stroke-width="3"/>${values.map(({ value }, index) => `<circle cx="${values.length === 1 ? width / 2 : index * width / (values.length - 1)}" cy="${(base - value / max * 164).toFixed(1)}" r="3" fill="#1976d2"/>`).join('')}`;
+    return `<section><h2>${esc(metric)}</h2><p>${mode === 'comparison' ? 'Comparison' : 'Chronological trend'} · max: ${max}</p><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(metric)} ${mode}"><line x1="0" y1="188" x2="${width}" y2="188" stroke="#cbd5e1"/>${shape}${labels}</svg></section>`;
   }).join('');
-  return `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><style>body{font:15px system-ui;margin:32px;color:#18212f}section{margin:28px 0;padding:16px;border:1px solid #d8dee9;border-radius:8px}svg{width:100%;height:auto}text{font-size:10px;fill:#475569}</style><h1>${esc(title)}</h1><p>Series: ${series.length}. Generated locally.</p>${charts}`;
+  return `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><style>body{font:15px system-ui;margin:32px;color:#18212f}section{margin:28px 0;padding:16px;border:1px solid #d8dee9;border-radius:8px}svg{width:100%;height:auto}text{font-size:10px;fill:#475569}</style><h1>${esc(title)}</h1><p>Series: ${ordered.length}. Generated locally.</p>${charts}`;
 }
 
 export function seriesCsv(series: Series): string {

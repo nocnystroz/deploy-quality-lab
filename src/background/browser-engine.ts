@@ -27,18 +27,27 @@ function toHar(records: Map<string, NetworkRecord>): string {
   return JSON.stringify({ log: { version: '1.2', creator: { name: 'Deploy Speed Tester', version: '0.1.0' }, entries } }, null, 2);
 }
 
-async function runActions(tabId: number, profile: TestProfile): Promise<void> {
+async function runActions(target: Debuggee, profile: TestProfile): Promise<void> {
+  const tabId = target.tabId;
+  if (tabId === undefined) throw new Error('Brak karty dla interakcji.');
   for (const action of profile.actions) {
     if (action.type === 'wait') { await sleep(action.durationMs); continue; }
     const deadline = Date.now() + (action.type === 'click' ? action.timeoutMs : 0);
-    let result: chrome.scripting.InjectionResult<boolean>[];
-    do { result = await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: (step: typeof action) => {
+    let found = false;
+    do {
+      const result = await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: (step: typeof action) => {
       if (step.type === 'scroll') { window.scrollTo(step.x, step.y); return true; }
       const el = document.querySelector(step.selector) as HTMLElement | null;
-      if (!el) return false;
-      el.click(); return true;
-    }, args: [action] }); if (!result[0]?.result && action.type === 'click') await sleep(100); } while (!result[0]?.result && Date.now() < deadline);
-    if (!result[0]?.result) throw new Error(`Nie znaleziono elementu dla kroku: ${action.type === 'click' ? action.selector : 'scroll'}`);
+      if (!el) return { found: false };
+      el.scrollIntoView({ block: 'center', inline: 'center' }); const rect = el.getBoundingClientRect();
+      return { found: true, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }, args: [action] });
+      const value = result[0]?.result as boolean | { found: boolean; x?: number; y?: number } | undefined;
+      if (action.type === 'scroll') found = value === true;
+      else if (value && typeof value !== 'boolean' && value.found && typeof value.x === 'number' && typeof value.y === 'number') { await send(target, 'Input.dispatchMouseEvent', { type: 'mousePressed', x: value.x, y: value.y, button: 'left', clickCount: 1 }); await send(target, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x: value.x, y: value.y, button: 'left', clickCount: 1 }); found = true; }
+      if (!found && action.type === 'click') await sleep(100);
+    } while (!found && Date.now() < deadline);
+    if (!found) throw new Error(`Nie znaleziono elementu dla kroku: ${action.type === 'click' ? action.selector : 'scroll'}`);
     if (action.type === 'click') await sleep(Math.min(action.timeoutMs, 1_000));
   }
 }
@@ -78,7 +87,8 @@ export async function runBrowser(profile: TestProfile, url: string, index: numbe
   try {
     await chrome.debugger.attach(target, '1.3');
     await send(target, 'Network.enable'); await send(target, 'Performance.enable'); await send(target, 'Page.enable');
-    await send(target, 'Page.addScriptToEvaluateOnNewDocument', { source: `(() => { window.__deploySpeedVitals = { lcp: undefined, cls: 0, inp: undefined }; new PerformanceObserver(list => { const entries = list.getEntries(); const last = entries[entries.length - 1]; if (last) window.__deploySpeedVitals.lcp = last.startTime; }).observe({ type: 'largest-contentful-paint', buffered: true }); new PerformanceObserver(list => { for (const entry of list.getEntries()) if (!entry.hadRecentInput) window.__deploySpeedVitals.cls += entry.value; }).observe({ type: 'layout-shift', buffered: true }); new PerformanceObserver(list => { for (const entry of list.getEntries()) window.__deploySpeedVitals.inp = Math.max(window.__deploySpeedVitals.inp || 0, entry.duration || 0); }).observe({ type: 'event', buffered: true, durationThreshold: 16 }); })()` });
+    await send(target, 'Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => undefined);
+    await send(target, 'Page.addScriptToEvaluateOnNewDocument', { source: `(() => { const vitals = window.__deploySpeedVitals = { lcp: undefined, cls: 0, inp: undefined }; const observe = (type, callback, options = {}) => { try { new PerformanceObserver(list => list.getEntries().forEach(callback)).observe({ type, buffered: true, ...options }); } catch {} }; observe('largest-contentful-paint', entry => { vitals.lcp = Math.max(vitals.lcp || 0, entry.startTime || 0); }); observe('layout-shift', entry => { if (!entry.hadRecentInput) vitals.cls += entry.value || 0; }); observe('event', entry => { if (entry.interactionId) vitals.inp = Math.max(vitals.inp || 0, entry.duration || 0); }, { durationThreshold: 16 }); })()` });
     await send(target, 'Network.setCacheDisabled', { cacheDisabled: profile.disableCache });
     if (profile.userAgent) await send(target, 'Network.setUserAgentOverride', { userAgent: profile.userAgent });
     const blockedPatterns = blockedUrlPatterns(profile.blockedPatterns);
@@ -89,7 +99,7 @@ export async function runBrowser(profile: TestProfile, url: string, index: numbe
     await send(target, 'Tracing.start', { categories: 'devtools.timeline,blink.user_timing,loading', transferMode: 'ReturnAsStream' });
     const loaded = cdpEvent(target, 'Page.loadEventFired', profile.requestTimeoutMs ?? 30_000);
     await chrome.tabs.update(tab.id, { url }); await loaded;
-    await runActions(tab.id, profile); await sleep(300);
+    await runActions(target, profile); await sleep(1_000);
     const metrics = await pageMetrics(tab.id, start);
     const status = [...records.values()].find(r => r.request?.url === url)?.response?.status;
     metrics.status = status;
