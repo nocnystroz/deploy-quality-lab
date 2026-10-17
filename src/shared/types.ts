@@ -119,6 +119,8 @@ export interface SmokeCheckResult {
   durationMs: number;
   actualStatus?: number;
   framework?: 'nextjs' | 'react' | 'unknown';
+  /** Timing and network delta for SPA interactions such as router navigation. */
+  interactions?: { action: string; durationMs: number; routeChanged: boolean; resources: number; transferBytes: number }[];
   failures: string[];
   artifacts?: Artifact[];
 }
