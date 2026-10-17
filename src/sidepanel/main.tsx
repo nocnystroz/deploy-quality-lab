@@ -7,7 +7,7 @@ import { medianRun, summarize, thresholdFailures } from '../shared/statistics';
 import { validateProfile } from '../shared/validation';
 import type { Action, Engine, Series, SeriesKind, TestProfile, TestRun } from '../shared/types';
 import { copy, type Language } from './i18n';
-import { SmokePanel } from './smoke-panel';
+import { SmokePanelV2 } from './smoke-panel-v2';
 import { Waterfall } from './waterfall';
 import './style.css';
 
@@ -76,7 +76,7 @@ function App() {
   return <main>
     <header><div><b>Deploy Quality Lab</b><small>local performance & smoke tests</small></div><div className="header-actions"><button title={t.detached} onClick={() => void chrome.runtime.sendMessage({ type: 'open-detached-window' })}>↗</button><select aria-label="Language" value={lang} onChange={e => setLang(e.target.value as Language)}><option value="pl">PL</option><option value="en">EN</option></select></div></header>
     <nav><button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>{t.profiles}</button><button className={tab === 'results' ? 'active' : ''} onClick={() => setTab('results')}>{t.results} <em>{series.length}</em></button><button className={tab === 'smoke' ? 'active' : ''} onClick={() => setTab('smoke')}>Smoke</button></nav>
-    {tab === 'smoke' ? <SmokePanel /> : tab === 'profile' ? <section className="content">
+    {tab === 'smoke' ? <SmokePanelV2 lang={lang} /> : tab === 'profile' ? <section className="content">
       <label>{t.profileName}<input value={profile.name} onChange={e => patch({ name: e.target.value })} /></label>
       <label>{t.url}<textarea value={profile.urls.join('\n')} onChange={e => patch({ urls: parseLines(e.target.value) })} placeholder="https://test.example.com" /></label>
       <div className="grid"><label>{t.engine}<select value={profile.engine} onChange={e => patch({ engine: e.target.value as Engine })}><option value="browser">Chrome / CWV</option><option value="fetch">HTTP request (fetch)</option></select></label><label>{t.runs}<input type="number" min="1" max="50" value={profile.runs} onChange={e => patch({ runs: Math.max(1, Number(e.target.value)) })} /></label><label>{t.aggregate}<select value={profile.aggregate} onChange={e => patch({ aggregate: e.target.value as TestProfile['aggregate'] })}><option value="median">Mediana</option><option value="p75">P75</option><option value="p90">P90</option></select></label></div>
