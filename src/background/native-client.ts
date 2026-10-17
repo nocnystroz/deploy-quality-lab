@@ -7,6 +7,8 @@ async function send(request: NativeRequest): Promise<NativeResponse> {
   catch (error) { return { ok: false, error: `Companion niedostępny: ${String(error)}` }; }
 }
 
+export async function pingCompanion(): Promise<NativeResponse> { return send({ type: 'ping', payload: {} }); }
+
 export async function runCurl(profile: TestProfile, url: string, index: number): Promise<TestRun> {
   const startedAt = new Date().toISOString();
   const response = await send({ type: 'curl', payload: { profile, url } });
