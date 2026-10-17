@@ -11,7 +11,7 @@ const root = resolve(fileURLToPath(new URL('.', import.meta.url))); const manife
 // Node must receive the host script as its first argument; a small wrapper avoids shell interpretation.
 const wrapper = resolve(root, process.platform === 'win32' ? 'launch-host.cmd' : 'launch-host.sh');
 if (process.platform === 'win32') await writeFile(wrapper, `@echo off\r\n"${process.execPath}" "${resolve(root, 'host.mjs')}"\r\n`);
-else { await writeFile(wrapper, `#!/bin/sh\nexec "${process.execPath}" "${resolve(root, 'host.mjs')}"\n`, { mode: 0o755 });
+else { await writeFile(wrapper, `#!/bin/sh\nexec "${process.execPath}" "${resolve(root, 'host.mjs')}"\n`, { mode: 0o755 }); }
 manifest.path = wrapper;
 const file = resolve(root, 'com.deploy_speed_tester.host.json'); await writeFile(file, JSON.stringify(manifest, null, 2));
 if (platform() === 'linux') { const dir = resolve(homedir(), '.config/google-chrome/NativeMessagingHosts'); await mkdir(dir, { recursive: true }); await writeFile(resolve(dir, 'com.deploy_speed_tester.host.json'), JSON.stringify(manifest, null, 2)); }
