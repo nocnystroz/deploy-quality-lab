@@ -65,9 +65,10 @@ export async function runBrowser(profile: TestProfile, url: string, index: numbe
   const startedAt = new Date().toISOString(); const start = performance.now();
   const tab = await chrome.tabs.create({ url: 'about:blank', active: false });
   if (tab.id === undefined) throw new Error('Nie udało się utworzyć karty testowej.');
-  const target = { tabId: tab.id }; const records = new Map<string, NetworkRecord>();
+  const target = { tabId: tab.id }; const records = new Map<string, NetworkRecord>(); const debugEvents: { at: string; method: string }[] = [];
   const onEvent = (source: Debuggee, method: string, params: any) => {
     if (source.tabId !== tab.id) return;
+    if (profile.debugMode && debugEvents.length < 500) debugEvents.push({ at: new Date().toISOString(), method });
     if (method === 'Network.requestWillBeSent') records.set(params.requestId, { request: params.request, started: params.timestamp });
     if (method === 'Network.responseReceived') { const r = records.get(params.requestId) ?? {}; r.response = params.response; records.set(params.requestId, r); }
     if (method === 'Network.loadingFinished') { const r = records.get(params.requestId) ?? {}; r.finished = params.timestamp; r.encodedDataLength = params.encodedDataLength; records.set(params.requestId, r); }
@@ -93,7 +94,8 @@ export async function runBrowser(profile: TestProfile, url: string, index: numbe
     const traceComplete = cdpEvent(target, 'Tracing.tracingComplete'); await send(target, 'Tracing.end');
     const traceInfo = await traceComplete; const artifacts: Artifact[] = [{ kind: 'har', filename: `run-${index}.har`, mimeType: 'application/json', content: toHar(records) }];
     if (traceInfo.stream) artifacts.push({ kind: 'trace', filename: `run-${index}.json`, mimeType: 'application/json', content: await readTrace(target, traceInfo.stream) });
+    if (profile.debugMode) artifacts.push({ kind: 'debug', filename: `run-${index}-debug.json`, mimeType: 'application/json', content: JSON.stringify({ url, config: { disableCache: profile.disableCache, blockedPatterns: profile.blockedPatterns, network: profile.network, viewport: profile.viewport }, events: debugEvents }, null, 2) });
     return { id: crypto.randomUUID(), url, index, startedAt, durationMs: performance.now() - start, metrics, artifacts };
-  } catch (error) { return { id: crypto.randomUUID(), url, index, startedAt, durationMs: performance.now() - start, error: String(error) }; }
+  } catch (error) { return { id: crypto.randomUUID(), url, index, startedAt, durationMs: performance.now() - start, error: String(error), artifacts: profile.debugMode ? [{ kind: 'debug', filename: `run-${index}-debug.json`, mimeType: 'application/json', content: JSON.stringify({ url, error: String(error), events: debugEvents }, null, 2) }] : undefined }; }
   finally { chrome.debugger.onEvent.removeListener(onEvent); await chrome.debugger.detach(target).catch(() => undefined); await chrome.tabs.remove(tab.id).catch(() => undefined); }
 }

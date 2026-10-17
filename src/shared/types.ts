@@ -33,6 +33,8 @@ export interface TestProfile {
   warmupRuns: number;
   thresholds: Thresholds;
   lighthouse: boolean;
+  /** Stores a compact CDP diagnostic log with the run; never sent off-device. */
+  debugMode?: boolean;
   createdAt: string;
   updatedAt: string;
 }
