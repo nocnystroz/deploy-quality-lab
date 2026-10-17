@@ -35,12 +35,14 @@ function App() {
   const [historyFilter, setHistoryFilter] = useState('');
   const [progress, setProgress] = useState<{ done: number; total: number } | undefined>();
   const [retention, setRetention] = useState(50);
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
   const [exportMetrics, setExportMetrics] = useState<HistoryMetric[]>([...historyMetrics]);
   const cancelRef = useRef(false);
   const [referenceId, setReferenceId] = useState(''); const importRef = useRef<HTMLInputElement>(null);
   const selectedReference = useMemo(() => series.find(item => item.id === referenceId) ?? series.find(item => item.profileId === profile.id && item.kind === 'before'), [series, profile.id, referenceId]);
   const reload = async () => { setProfiles((await db.profiles.list()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))); setSeries((await db.series.list()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))); };
-  useEffect(() => { void reload(); chrome.storage.local.get({ retention: 50 }).then(value => setRetention(value.retention)); }, []);
+  useEffect(() => { void reload(); chrome.storage.local.get({ retention: 50, deployQualityDisclaimerAccepted: false }).then(value => { setRetention(value.retention); setDisclaimerAccepted(value.deployQualityDisclaimerAccepted); }); }, []);
+  useEffect(() => { document.querySelectorAll('label').forEach(label => { const control = label.querySelector('input, textarea, select') as HTMLElement | null; if (control && !control.title) control.title = label.textContent?.trim() || ''; }); }, [tab, lang]);
   const patch = (change: Partial<TestProfile>) => setProfile(current => ({ ...current, ...change, updatedAt: new Date().toISOString() }));
   const save = async () => { await db.profiles.put(profile); await reload(); };
   const chooseProfile = (item: TestProfile) => { setProfile(item); setTab('profile'); };
@@ -69,6 +71,7 @@ function App() {
   const deleteProfile = async (item: TestProfile) => { if (!confirm(`${t.delete} “${item.name}”?`)) return; await db.profiles.delete(item.id); if (item.id === profile.id) setProfile(newProfile()); await reload(); };
   const visibleSeries = series.filter(item => `${item.label} ${item.profileName} ${item.kind}`.toLocaleLowerCase().includes(historyFilter.toLocaleLowerCase()));
   const toggleExportMetric = (metric: HistoryMetric) => setExportMetrics(current => current.includes(metric) ? current.filter(item => item !== metric) : [...current, metric]);
+  if (!disclaimerAccepted) return <main className="disclaimer"><section><img src="/assets/deploy-quality-lab-icon.png" alt="" /><h1>Deploy Quality Lab</h1><p>Wtyczka może otwierać strony testowe, wykonywać zdefiniowane kliknięcia i zapisywać wyniki wyłącznie lokalnie w Twojej przeglądarce.</p><p>Nie dodawaj haseł, danych produkcyjnych ani scenariuszy logowania. Uruchamiaj testy wyłącznie wobec systemów, do których masz uprawnienia.</p><label className="check"><input type="checkbox" onChange={e => { if (e.target.checked) { chrome.storage.local.set({ deployQualityDisclaimerAccepted: true }); setDisclaimerAccepted(true); } }} />Rozumiem i akceptuję zasady użycia.</label></section></main>;
   return <main>
     <header><div><b>Deploy Quality Lab</b><small>local performance & smoke tests</small></div><div className="header-actions"><button title={t.detached} onClick={() => void chrome.runtime.sendMessage({ type: 'open-detached-window' })}>↗</button><select aria-label="Language" value={lang} onChange={e => setLang(e.target.value as Language)}><option value="pl">PL</option><option value="en">EN</option></select></div></header>
     <nav><button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>{t.profiles}</button><button className={tab === 'results' ? 'active' : ''} onClick={() => setTab('results')}>{t.results} <em>{series.length}</em></button><button className={tab === 'smoke' ? 'active' : ''} onClick={() => setTab('smoke')}>Smoke</button></nav>
