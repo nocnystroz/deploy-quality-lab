@@ -37,7 +37,7 @@ async function startSelectorPicker(): Promise<{ ok: boolean; error?: string }> {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'open-detached-window') {
-    chrome.windows.create({ url: chrome.runtime.getURL('src/sidepanel/index.html'), type: 'popup', width: 460, height: 820 }).then(window => sendResponse({ ok: true, windowId: window.id })).catch(error => sendResponse({ ok: false, error: String(error) }));
+    chrome.windows.create({ url: chrome.runtime.getURL('src/sidepanel/index.html'), type: 'popup', width: 980, height: 820 }).then(window => sendResponse({ ok: true, windowId: window.id })).catch(error => sendResponse({ ok: false, error: String(error) }));
     return true;
   }
   if (message.type === 'start-selector-picker') { startSelectorPicker().then(sendResponse).catch(error => sendResponse({ ok: false, error: String(error) })); return true; }
