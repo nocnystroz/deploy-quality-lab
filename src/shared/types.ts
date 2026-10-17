@@ -118,6 +118,7 @@ export interface SmokeCheckResult {
   status: 'passed' | 'failed';
   durationMs: number;
   actualStatus?: number;
+  framework?: 'nextjs' | 'react' | 'unknown';
   failures: string[];
   artifacts?: Artifact[];
 }
