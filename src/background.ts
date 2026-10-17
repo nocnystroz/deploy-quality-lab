@@ -21,6 +21,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     pingCompanion().then(sendResponse).catch(error => sendResponse({ ok: false, error: String(error) }));
     return true;
   }
+  if (message.type === 'validate-actions') {
+    chrome.tabs.query({ active: true, currentWindow: true }).then(async tabs => {
+      const tabId = tabs[0]?.id;
+      if (!tabId) return { ok: false, error: 'Nie znaleziono aktywnej karty.' };
+      const selectors = (message.selectors as string[]).filter(Boolean);
+      const result = await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: (items: string[]) => items.map(selector => ({ selector, found: Boolean(document.querySelector(selector)) })), args: [selectors] });
+      return { ok: true, checks: result[0]?.result ?? [] };
+    }).then(sendResponse).catch(error => sendResponse({ ok: false, error: String(error) }));
+    return true;
+  }
 });
 
 export type RunResponse = TestRun | { error: string };
