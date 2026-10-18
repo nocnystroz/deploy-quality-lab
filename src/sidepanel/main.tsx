@@ -77,6 +77,47 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 function format(ms?: number): string {
   return typeof ms === "number" ? `${Math.round(ms)} ms` : "—";
 }
+function dateKey(iso: string): string {
+  const date = new Date(iso);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function formatSeriesDate(iso: string, language: Language): string {
+  return new Intl.DateTimeFormat(language === "pl" ? "pl-PL" : "en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(new Date(iso));
+}
+function seriesUrls(item: Series): string[] {
+  return [...new Set(item.runs.map((run) => run.url).filter(Boolean))];
+}
+function historyValue(item: Series, metric: HistoryMetric): number | undefined {
+  const value = item.summary?.[metric];
+  return typeof value === "number" ? value : undefined;
+}
+function formatHistoryValue(metric: HistoryMetric, value: number): string {
+  if (metric === "cls") return value.toFixed(3);
+  if (metric === "transferBytes") return `${Math.round(value / 1024)} KB`;
+  if (metric === "status") return String(value);
+  return format(value);
+}
+function sameComparisonContext(left: Series, right: Series): boolean {
+  const leftProfile = completeProfile(left.profileSnapshot);
+  const rightProfile = completeProfile(right.profileSnapshot);
+  return (
+    leftProfile.engine === rightProfile.engine &&
+    leftProfile.disableCache === rightProfile.disableCache &&
+    leftProfile.userAgent === rightProfile.userAgent &&
+    JSON.stringify([...leftProfile.urls].sort()) ===
+      JSON.stringify([...rightProfile.urls].sort()) &&
+    JSON.stringify(leftProfile.viewport) === JSON.stringify(rightProfile.viewport) &&
+    JSON.stringify(leftProfile.network) === JSON.stringify(rightProfile.network) &&
+    leftProfile.cpuSlowdown === rightProfile.cpuSlowdown
+  );
+}
 type ComparedMetric = keyof Metrics | "postTtfbMs";
 const comparedMetrics: { key: ComparedMetric; label: string }[] = [
   { key: "totalMs", label: "Total" },
@@ -387,6 +428,13 @@ function App() {
     "",
   );
   const [historyFilter, setHistoryFilter] = useState("");
+  const [historyProfileId, setHistoryProfileId] = useState("all");
+  const [historyKind, setHistoryKind] = useState<SeriesKind | "all">("all");
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
+  const [historySort, setHistorySort] = useState<"newest" | "oldest">("newest");
+  const [trendMetric, setTrendMetric] = useState<HistoryMetric>("totalMs");
+  const [comparisonIds, setComparisonIds] = useState<string[]>([]);
   const [progress, setProgress] = useState<
     { done: number; total: number } | undefined
   >();
@@ -729,11 +777,59 @@ function App() {
     if (item.id === profile.id) setProfile(newProfile());
     await reload();
   };
-  const visibleSeries = series.filter((item) =>
-    `${item.label} ${item.profileName} ${item.kind}`
-      .toLocaleLowerCase()
-      .includes(historyFilter.toLocaleLowerCase()),
+  const invalidHistoryRange = Boolean(historyFrom && historyTo && historyFrom > historyTo);
+  const visibleSeries = useMemo(
+    () =>
+      series
+        .filter((item) => {
+          const matchesText = `${item.label} ${item.profileName} ${item.kind} ${seriesUrls(item).join(" ")}`
+            .toLocaleLowerCase()
+            .includes(historyFilter.toLocaleLowerCase());
+          const itemDate = dateKey(item.createdAt);
+          return (
+            matchesText &&
+            (historyProfileId === "all" || item.profileId === historyProfileId) &&
+            (historyKind === "all" || item.kind === historyKind) &&
+            !invalidHistoryRange &&
+            (!historyFrom || itemDate >= historyFrom) &&
+            (!historyTo || itemDate <= historyTo)
+          );
+        })
+        .sort((left, right) =>
+          historySort === "newest"
+            ? right.createdAt.localeCompare(left.createdAt)
+            : left.createdAt.localeCompare(right.createdAt),
+        ),
+    [series, historyFilter, historyProfileId, historyKind, historyFrom, historyTo, historySort, invalidHistoryRange],
   );
+  const historyProfiles = useMemo(
+    () =>
+      [...new Map(series.map((item) => [item.profileId, item.profileName])).entries()]
+        .map(([id, name]) => ({ id, name }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [series],
+  );
+  const selectedComparison = comparisonIds
+    .map((id) => series.find((item) => item.id === id))
+    .filter((item): item is Series => Boolean(item));
+  const trendSeries = [...visibleSeries]
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .filter((item) => typeof historyValue(item, trendMetric) === "number");
+  const trendMax = Math.max(...trendSeries.map((item) => historyValue(item, trendMetric) ?? 0), 1);
+  const toggleComparison = (id: string) => {
+    setComparisonIds((current) => {
+      if (current.includes(id)) return current.filter((item) => item !== id);
+      return current.length < 2 ? [...current, id] : [current[1], id];
+    });
+  };
+  const clearHistoryFilters = () => {
+    setHistoryFilter("");
+    setHistoryProfileId("all");
+    setHistoryKind("all");
+    setHistoryFrom("");
+    setHistoryTo("");
+    setHistorySort("newest");
+  };
   const retention = Number(retentionInput);
   const validRetention =
     Number.isInteger(retention) && retention >= 1 && retention <= 1000;
@@ -1524,12 +1620,115 @@ function App() {
           </section>
         ) : (
           <section className="content">
-            <input
-              className="history-filter"
-              placeholder={t.filter}
-              value={historyFilter}
-              onChange={(e) => setHistoryFilter(e.target.value)}
-            />
+            <fieldset className="history-controls">
+              <legend>{t.historyFilters}</legend>
+              <input
+                className="history-filter"
+                placeholder={t.filter}
+                value={historyFilter}
+                onChange={(e) => setHistoryFilter(e.target.value)}
+              />
+              <div className="history-filter-grid">
+                <label>
+                  {t.profiles}
+                  <HelpIcon hint={lang === "pl" ? "Zawęża historię do serii zapisanych dla wybranego profilu, także gdy sam profil został już usunięty." : "Limits history to series saved for this profile, including profiles that were later deleted."} />
+                  <select
+                    value={historyProfileId}
+                    onChange={(e) => setHistoryProfileId(e.target.value)}
+                  >
+                    <option value="all">{t.allProfiles}</option>
+                    {historyProfiles.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t.results}
+                  <HelpIcon hint={lang === "pl" ? "Filtruje oznaczenie serii: przed zmianą, po zmianie lub własna etykieta." : "Filters the series marker: before change, after change, or custom label."} />
+                  <select
+                    value={historyKind}
+                    onChange={(e) => setHistoryKind(e.target.value as SeriesKind | "all")}
+                  >
+                    <option value="all">{t.allKinds}</option>
+                    <option value="before">{t.before}</option>
+                    <option value="after">{t.after}</option>
+                    <option value="custom">{t.custom}</option>
+                  </select>
+                </label>
+                <label>
+                  {t.fromDate}
+                  <HelpIcon hint={lang === "pl" ? "Uwzględnia serie uruchomione tego dnia lub później, według lokalnej daty przeglądarki." : "Includes series run on this day or later, using the browser's local date."} />
+                  <input type="date" value={historyFrom} max={historyTo || undefined} onChange={(e) => setHistoryFrom(e.target.value)} />
+                </label>
+                <label>
+                  {t.toDate}
+                  <HelpIcon hint={lang === "pl" ? "Uwzględnia serie uruchomione tego dnia lub wcześniej, według lokalnej daty przeglądarki." : "Includes series run on this day or earlier, using the browser's local date."} />
+                  <input type="date" value={historyTo} min={historyFrom || undefined} onChange={(e) => setHistoryTo(e.target.value)} />
+                </label>
+                <label>
+                  {t.sort}
+                  <HelpIcon hint={lang === "pl" ? "Zmienia wyłącznie kolejność kart i eksportu aktualnie widocznych serii." : "Changes only the order of cards and the currently visible-series export."} />
+                  <select
+                    value={historySort}
+                    onChange={(e) => setHistorySort(e.target.value as "newest" | "oldest")}
+                  >
+                    <option value="newest">{t.newestFirst}</option>
+                    <option value="oldest">{t.oldestFirst}</option>
+                  </select>
+                </label>
+              </div>
+              <div className="button-row">
+                <button onClick={clearHistoryFilters}>{t.clearFilters}</button>
+                <small>{t.visibleSeries}: {visibleSeries.length}/{series.length}</small>
+              </div>
+              {invalidHistoryRange && <p className="history-filter-error">{t.invalidDateRange}</p>}
+            </fieldset>
+            {trendSeries.length > 1 && (
+              <section className="history-trend" aria-label={t.historyTrend}>
+                <div>
+                  <strong>{t.historyTrend}</strong>
+                  <label>
+                    {t.trendMetric}
+                    <HelpIcon hint={lang === "pl" ? "Wykres pokazuje kolejne, aktualnie widoczne serie w czasie. Wysokość słupka jest względna wobec największej widocznej wartości." : "The chart shows the currently visible series over time. Bar height is relative to the largest visible value."} />
+                    <select value={trendMetric} onChange={(e) => setTrendMetric(e.target.value as HistoryMetric)}>
+                      {historyMetrics.map((metric) => <option key={metric} value={metric}>{metricNames[metric]}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="trend-bars">
+                  {trendSeries.map((item) => {
+                    const value = historyValue(item, trendMetric)!;
+                    return <div className="trend-bar" key={item.id} title={`${item.label} · ${formatSeriesDate(item.createdAt, lang)} · ${formatHistoryValue(trendMetric, value)}`}>
+                      <i style={{ height: `${Math.max(4, (value / trendMax) * 100)}%` }} />
+                      <small>{formatSeriesDate(item.createdAt, lang)}</small>
+                    </div>;
+                  })}
+                </div>
+              </section>
+            )}
+            <section className="comparison-workbench" aria-label={t.compareSelection}>
+              <strong>{t.compareSelection}</strong>
+              {selectedComparison.length === 0 ? (
+                <small>{t.comparePick}</small>
+              ) : selectedComparison.length === 1 ? (
+                <small>{t.compareFirst}</small>
+              ) : (
+                <>
+                  <div className="comparison-series-labels">
+                    <span>{t.before}: <b>{selectedComparison[0].label}</b><small>{formatSeriesDate(selectedComparison[0].createdAt, lang)}</small></span>
+                    <span>{t.after}: <b>{selectedComparison[1].label}</b><small>{formatSeriesDate(selectedComparison[1].createdAt, lang)}</small></span>
+                  </div>
+                  {!sameComparisonContext(selectedComparison[0], selectedComparison[1]) && (
+                    <p className="comparison-warning">{t.comparisonContextWarning}</p>
+                  )}
+                  <ComparisonTable
+                    baseline={selectedComparison[0].summary}
+                    current={selectedComparison[1].summary}
+                    language={lang}
+                  />
+                </>
+              )}
+            </section>
             {series.length === 0 ? (
               <p>{t.noResults}</p>
             ) : (
@@ -1547,11 +1746,24 @@ function App() {
                 return (
                   <article className="result" key={item.id}>
                     <div>
-                      <strong>{item.label}</strong>
+                      <div className="result-heading">
+                        <strong>{item.label}</strong>
+                        <span className={`series-kind series-kind-${item.kind}`}>
+                          {item.kind === "before" ? t.before : item.kind === "after" ? t.after : t.custom}
+                        </span>
+                      </div>
                       <small>
-                        {item.profileName} ·{" "}
-                        {new Date(item.createdAt).toLocaleString(lang)}
+                        {item.profileName} · {formatSeriesDate(item.createdAt, lang)}
                       </small>
+                      <small className="series-context">
+                        {t.urls}: {seriesUrls(item).join(", ") || "—"} · {t.engine}: {item.profileSnapshot.engine === "browser" ? "Chrome / CWV" : "HTTP request (fetch)"} · {item.runs.length} {t.runs.toLocaleLowerCase()} · {item.aggregate.toUpperCase()}
+                      </small>
+                      <details className="series-configuration">
+                        <summary>{t.configuration}</summary>
+                        <small>
+                          {item.profileSnapshot.disableCache ? t.cache : t.cacheEnabled} · {item.profileSnapshot.viewport?.width ?? "—"}×{item.profileSnapshot.viewport?.height ?? "—"} · CPU ×{item.profileSnapshot.cpuSlowdown ?? 1} · {item.profileSnapshot.runIntervalMs ?? 1500} ms
+                        </small>
+                      </details>
                     </div>
                     {!reference && (
                       <div className="metric-grid">
@@ -1649,6 +1861,13 @@ function App() {
                       </table>
                     </details>
                     <div className="button-row">
+                      <button
+                        className={comparisonIds.includes(item.id) ? "selected-comparison" : ""}
+                        onClick={() => toggleComparison(item.id)}
+                        aria-pressed={comparisonIds.includes(item.id)}
+                      >
+                        {comparisonIds.includes(item.id) ? "✓ " : ""}{t.selectForCompare}
+                      </button>
                       <button
                         onClick={() =>
                           download(
