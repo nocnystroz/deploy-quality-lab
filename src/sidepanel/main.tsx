@@ -1622,12 +1622,16 @@ function App() {
           <section className="content">
             <fieldset className="history-controls">
               <legend>{t.historyFilters}</legend>
-              <input
-                className="history-filter"
-                placeholder={t.filter}
-                value={historyFilter}
-                onChange={(e) => setHistoryFilter(e.target.value)}
-              />
+              <label className="history-search">
+                {t.filter}
+                <HelpIcon hint={lang === "pl" ? "Przeszukuje nazwę profilu, etykietę, typ serii i testowane adresy URL. Działa razem z pozostałymi filtrami." : "Searches the profile name, label, series type, and tested URLs. Works together with the remaining filters."} />
+                <input
+                  className="history-filter"
+                  placeholder={t.filter}
+                  value={historyFilter}
+                  onChange={(e) => setHistoryFilter(e.target.value)}
+                />
+              </label>
               <div className="history-filter-grid">
                 <label>
                   {t.profiles}
@@ -1707,7 +1711,10 @@ function App() {
               </section>
             )}
             <section className="comparison-workbench" aria-label={t.compareSelection}>
-              <strong>{t.compareSelection}</strong>
+              <div className="comparison-workbench-title">
+                <strong>{t.compareSelection}</strong>
+                {comparisonIds.length > 0 && <button onClick={() => setComparisonIds([])}>{t.clearComparison}</button>}
+              </div>
               {selectedComparison.length === 0 ? (
                 <small>{t.comparePick}</small>
               ) : selectedComparison.length === 1 ? (

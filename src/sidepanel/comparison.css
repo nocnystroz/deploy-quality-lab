@@ -64,6 +64,7 @@
 .retention-error { color: #b42318; }
 
 .history-controls { margin: 0 0 12px; }
+.history-search { margin-bottom: 8px; }
 .history-filter-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -88,6 +89,8 @@
 }
 .comparison-workbench > strong,
 .comparison-workbench > small { display: block; }
+.comparison-workbench-title { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.comparison-workbench-title button { border:0; background:transparent; color:#1e5f9f; font-size:11px; font-weight:700; cursor:pointer; }
 .comparison-workbench > small { margin-top: 4px; color: #52657a; }
 .comparison-series-labels { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 9px; }
 .comparison-series-labels span { padding:7px; border-radius:6px; background:#fff; border:1px solid #d7e2ee; font-size:11px; }
