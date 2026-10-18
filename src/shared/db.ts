@@ -51,8 +51,11 @@ export const db = {
     clear: () => request<undefined>('series', 'readwrite', s => s.clear()),
     /** Retains the newest series records and their artifacts. */
     prune: async (keep: number) => {
+      if (!Number.isInteger(keep) || keep < 1 || keep > 1000) {
+        throw new RangeError('Retention must be an integer between 1 and 1000.');
+      }
       const all = await request<Series[]>('series', 'readonly', s => s.getAll());
-      const expired = all.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(Math.max(0, keep));
+      const expired = all.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(keep);
       await Promise.all(expired.map(item => request<undefined>('series', 'readwrite', s => s.delete(item.id))));
       return expired.length;
     }

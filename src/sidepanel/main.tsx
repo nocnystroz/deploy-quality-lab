@@ -390,7 +390,8 @@ function App() {
   const [progress, setProgress] = useState<
     { done: number; total: number } | undefined
   >();
-  const [retention, setRetention] = useState(50);
+  const [retentionInput, setRetentionInput] = useState("50");
+  const [retentionError, setRetentionError] = useState("");
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
   const [exportMetrics, setExportMetrics] = useState<HistoryMetric[]>([
     ...historyMetrics,
@@ -423,7 +424,12 @@ function App() {
     chrome.storage.local
       .get({ retention: 50, deployQualityDisclaimerAccepted: false })
       .then((value) => {
-        setRetention(value.retention);
+        const savedRetention = Number(value.retention);
+        setRetentionInput(
+          Number.isInteger(savedRetention) && savedRetention >= 1 && savedRetention <= 1000
+            ? String(savedRetention)
+            : "50",
+        );
         setDisclaimerAccepted(value.deployQualityDisclaimerAccepted);
       });
   }, []);
@@ -728,6 +734,44 @@ function App() {
       .toLocaleLowerCase()
       .includes(historyFilter.toLocaleLowerCase()),
   );
+  const retention = Number(retentionInput);
+  const validRetention =
+    Number.isInteger(retention) && retention >= 1 && retention <= 1000;
+  const retentionRemovalCount = validRetention
+    ? Math.max(0, series.length - retention)
+    : 0;
+  const applyRetention = async () => {
+    if (!validRetention) {
+      setRetentionError(
+        lang === "pl"
+          ? "Podaj pełną liczbę od 1 do 1000. Wyniki nie zostały usunięte."
+          : "Enter a whole number from 1 to 1000. No results were deleted.",
+      );
+      return;
+    }
+    if (
+      retentionRemovalCount > 0 &&
+      !confirm(
+        lang === "pl"
+          ? `Retencja zachowa ${retention} z ${series.length} serii i trwale usunie ${retentionRemovalCount}. Kontynuować?`
+          : `Retention will keep ${retention} of ${series.length} series and permanently delete ${retentionRemovalCount}. Continue?`,
+      )
+    )
+      return;
+    try {
+      await chrome.storage.local.set({ retention });
+      const removed = await db.series.prune(retention);
+      setRetentionError("");
+      alert(`${t.retain}: ${removed}`);
+      await reload();
+    } catch (error) {
+      setRetentionError(
+        lang === "pl"
+          ? `Nie udało się zastosować retencji: ${String(error)}`
+          : `Could not apply retention: ${String(error)}`,
+      );
+    }
+  };
   const toggleExportMetric = (metric: HistoryMetric) =>
     setExportMetrics((current) =>
       current.includes(metric)
@@ -1750,26 +1794,40 @@ function App() {
             <div className="button-row">
               <label>
                 {t.retention}
+                <HelpIcon hint={fieldHints[t.retention]} />
                 <input
                   type="number"
                   min="1"
                   max="1000"
-                  value={retention}
-                  onChange={(e) =>
-                    setRetention(Math.max(1, Number(e.target.value) || 1))
-                  }
+                  step="1"
+                  value={retentionInput}
+                  aria-invalid={Boolean(retentionError) || !validRetention}
+                  onChange={(e) => {
+                    setRetentionInput(e.target.value);
+                    setRetentionError("");
+                  }}
                 />
               </label>
               <button
-                onClick={async () => {
-                  await chrome.storage.local.set({ retention });
-                  const removed = await db.series.prune(retention);
-                  alert(`${t.retain}: ${removed}`);
-                  await reload();
-                }}
+                disabled={!validRetention}
+                onClick={() => void applyRetention()}
               >
                 {t.retain}
               </button>
+              <small className={retentionError ? "retention-error" : "retention-preview"}>
+                {retentionError ||
+                  (validRetention
+                    ? lang === "pl"
+                      ? retentionRemovalCount
+                        ? `Do usunięcia po potwierdzeniu: ${retentionRemovalCount} z ${series.length} serii.`
+                        : "Żadna seria nie zostanie usunięta."
+                      : retentionRemovalCount
+                        ? `To delete after confirmation: ${retentionRemovalCount} of ${series.length} series.`
+                        : "No series will be deleted."
+                    : lang === "pl"
+                      ? "Podaj pełną liczbę od 1 do 1000."
+                      : "Enter a whole number from 1 to 1000.")}
+              </small>
               <button
                 className="danger"
                 onClick={async () => {

@@ -53,3 +53,12 @@
 .comparison-unchanged {
   color: #64748b;
 }
+
+.retention-preview,
+.retention-error {
+  align-self: center;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.retention-preview { color: #64748b; }
+.retention-error { color: #b42318; }
