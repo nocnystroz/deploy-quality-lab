@@ -904,6 +904,8 @@ export function SmokePanelV2({ lang }: { lang: Language }) {
           <strong>
             {run.status === "passed" ? "✓" : "×"} {run.suiteName}
           </strong>
+          <small>{run.createdAt} · {run.results.filter(result => result.status === "passed").length}/{run.suiteSnapshot.cases.length} {lang === "pl" ? "udanych przypadków" : "passed cases"} · {run.status}</small>
+          <button onClick={async () => { if (!confirm(lang === "pl" ? "Usunąć ten przebieg smoke?" : "Delete this smoke run?")) return; await db.smokeRuns.delete(run.id); await reload(); }}>{lang === "pl" ? "Usuń" : "Delete"}</button>
           {run.results.map((result) => (
             <details key={result.id}>
               <summary>
@@ -936,6 +938,7 @@ export function SmokePanelV2({ lang }: { lang: Language }) {
       <button
         className="danger"
         onClick={async () => {
+          if (!confirm(lang === "pl" ? "Usunąć całą historię smoke?" : "Delete all smoke history?")) return;
           await db.smokeRuns.clear();
           await reload();
         }}

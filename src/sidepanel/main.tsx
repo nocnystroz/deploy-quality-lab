@@ -14,7 +14,7 @@ import {
   seriesCsv,
   type HistoryMetric,
 } from "../shared/export";
-import { medianRun, summarize, thresholdFailures } from "../shared/statistics";
+import { medianRun, summarize, thresholdFailures, pageResults, isPartialSeries } from "../shared/statistics";
 import { comparisonTone, qualityRating } from "../shared/metric-quality";
 import { validateProfile } from "../shared/validation";
 import type {
@@ -95,7 +95,7 @@ function seriesUrls(item: Series): string[] {
   return [...new Set(item.runs.map((run) => run.url).filter(Boolean))];
 }
 function historyValue(item: Series, metric: HistoryMetric): number | undefined {
-  const value = item.summary?.[metric];
+  const value = pageResults(item).length === 1 ? pageResults(item)[0].summary?.[metric] : undefined;
   return typeof value === "number" ? value : undefined;
 }
 function formatHistoryValue(metric: HistoryMetric, value: number): string {
@@ -116,6 +116,13 @@ function sameComparisonContext(left: Series, right: Series): boolean {
     JSON.stringify(leftProfile.viewport) === JSON.stringify(rightProfile.viewport) &&
     JSON.stringify(leftProfile.network) === JSON.stringify(rightProfile.network) &&
     leftProfile.cpuSlowdown === rightProfile.cpuSlowdown
+    && left.aggregate === right.aggregate
+    && leftProfile.runs === rightProfile.runs
+    && leftProfile.warmupRuns === rightProfile.warmupRuns
+    && leftProfile.runIntervalMs === rightProfile.runIntervalMs
+    && leftProfile.requestTimeoutMs === rightProfile.requestTimeoutMs
+    && JSON.stringify(leftProfile.blockedPatterns) === JSON.stringify(rightProfile.blockedPatterns)
+    && JSON.stringify(leftProfile.actions) === JSON.stringify(rightProfile.actions)
   );
 }
 type ComparedMetric = keyof Metrics | "postTtfbMs";
@@ -449,11 +456,9 @@ function App() {
   const importRef = useRef<HTMLInputElement>(null);
   const selectedReference = useMemo(
     () =>
-      series.find((item) => item.id === referenceId) ??
-      series.find(
-        (item) => item.profileId === profile.id && item.kind === "before",
-      ),
-    [series, profile.id, referenceId],
+      series.filter(item => item.profileId === profile.id && item.kind === "before" && sameComparisonContext(item, { profileSnapshot: profile, aggregate: profile.aggregate } as Series) && pageResults(item).every(page => page.successful > 0))
+        .find(item => referenceId ? item.id === referenceId : true),
+    [series, profile, referenceId],
   );
   const reload = async () => {
     setProfiles(
@@ -674,7 +679,9 @@ function App() {
         aggregate: profile.aggregate,
         summary,
         thresholdFailures: [
-          ...thresholdFailures(summary, profile.thresholds, reference),
+          ...pageResults({ runs, profileSnapshot: executionProfile, aggregate: profile.aggregate } as Series).flatMap(page => thresholdFailures(page.summary, profile.thresholds, reference ? { ...reference, summary: pageResults(reference).find(before => before.url === page.url)?.summary } : undefined).map(failure => `${page.url}: ${failure}`)),
+          ...(runs.filter(run => run.metrics && !run.error).length < urls.length * profile.runs ? [lang === "pl" ? "Seria częściowa: nie wszystkie próby zakończyły się pomiarem." : "Partial series: some attempts did not produce a measurement."] : []),
+          ...(kind === "after" && !reference ? [lang === "pl" ? "Brak zgodnej referencji przed — regresja nie została oceniona." : "No compatible before reference — regression was not assessed."] : []),
           ...(cancelRef.current ? [t.partial] : []),
         ],
         referenceSeriesId: reference?.id,
@@ -1550,7 +1557,7 @@ function App() {
                 >
                   <option value="">{t.latestBaseline}</option>
                   {series
-                    .filter((s) => s.profileId === profile.id)
+                    .filter((s) => s.profileId === profile.id && s.kind === "before" && sameComparisonContext(s, { profileSnapshot: profile, aggregate: profile.aggregate } as Series) && pageResults(s).every(page => page.successful > 0))
                     .map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.label} · {new Date(s.createdAt).toLocaleString(lang)}
@@ -1728,11 +1735,10 @@ function App() {
                   {!sameComparisonContext(selectedComparison[0], selectedComparison[1]) && (
                     <p className="comparison-warning">{t.comparisonContextWarning}</p>
                   )}
-                  <ComparisonTable
-                    baseline={selectedComparison[0].summary}
-                    current={selectedComparison[1].summary}
-                    language={lang}
-                  />
+                  {sameComparisonContext(selectedComparison[0], selectedComparison[1]) && pageResults(selectedComparison[1]).map(page => {
+                    const before = pageResults(selectedComparison[0]).find(candidate => candidate.url === page.url);
+                    return <div key={page.url}><strong>{page.url}</strong><small>{lang === "pl" ? "Udane próby przed / po" : "Successful attempts before / after"}: {before?.successful ?? 0}/{before?.expected ?? 0} · {page.successful}/{page.expected}</small>{!before?.successful || !page.successful ? <p className="comparison-warning">{lang === "pl" ? "Brak udanych prób — porównanie niedostępne." : "No successful attempts — comparison unavailable."}</p> : <ComparisonTable baseline={before.summary} current={page.summary} language={lang} />}</div>;
+                  })}
                 </>
               )}
             </section>
@@ -1745,11 +1751,6 @@ function App() {
                       (candidate) => candidate.id === item.referenceSeriesId,
                     )
                   : undefined;
-                const postTtfb =
-                  typeof item.summary?.totalMs === "number" &&
-                  typeof item.summary?.ttfbMs === "number"
-                    ? item.summary.totalMs - item.summary.ttfbMs
-                    : undefined;
                 return (
                   <article className="result" key={item.id}>
                     <div>
@@ -1772,72 +1773,18 @@ function App() {
                         </small>
                       </details>
                     </div>
-                    {!reference && (
-                      <div className="metric-grid">
-                        <span>
-                          <small>{t.metricTotal}</small>
-                          {format(item.summary?.totalMs)}
-                        </span>
-                        <span
-                          className={qualityClass(
-                            "ttfbMs",
-                            item.summary?.ttfbMs,
-                          )}
-                        >
-                          <small>{t.metricTtfb}</small>
-                          {format(item.summary?.ttfbMs)}
-                        </span>
-                        <span>
-                          <small>{t.postTtfb}</small>
-                          {format(postTtfb)}
-                        </span>
-                        <span
-                          className={qualityClass("fcpMs", item.summary?.fcpMs)}
-                        >
-                          <small>{t.metricFcp}</small>
-                          {format(item.summary?.fcpMs)}
-                        </span>
-                        <span
-                          className={qualityClass("lcpMs", item.summary?.lcpMs)}
-                        >
-                          <small>{t.metricLcp}</small>
-                          {format(item.summary?.lcpMs)}
-                        </span>
-                        <span
-                          className={qualityClass("cls", item.summary?.cls)}
-                        >
-                          <small>{t.metricCls}</small>
-                          {item.summary?.cls?.toFixed(3) ?? "—"}
-                        </span>
-                        <span
-                          className={qualityClass("inpMs", item.summary?.inpMs)}
-                        >
-                          <small>{t.metricInp}</small>
-                          {format(item.summary?.inpMs)}
-                        </span>
-                      </div>
-                    )}
-                    {reference && (
-                      <ComparisonTable
-                        baseline={reference.summary}
-                        current={item.summary}
-                        language={lang}
-                      />
-                    )}
+                    {reference && !sameComparisonContext(reference, item) && <p className="comparison-warning">{t.comparisonContextWarning}</p>}
+                    {pageResults(item).map(page => <div key={page.url}><strong>{page.url}</strong><small>{lang === "pl" ? "Udane próby" : "Successful attempts"}: {page.successful}/{page.expected} · {page.successful < page.expected ? (lang === "pl" ? "Seria częściowa / nieudana" : "Partial / failed series") : "OK"}</small><ComparisonTable baseline={reference && sameComparisonContext(reference, item) ? pageResults(reference).find(before => before.url === page.url)?.summary : undefined} current={page.summary} language={lang} /></div>)}
                     <p
                       className={
-                        item.thresholdFailures.length ? "failure" : "success"
+                        item.thresholdFailures.length || isPartialSeries(item) ? "failure" : "success"
                       }
                     >
                       {item.thresholdFailures.length
                         ? item.thresholdFailures[0]
-                        : "✓ OK"}
+                        : isPartialSeries(item) ? (lang === "pl" ? "Seria częściowa lub nieudana." : "Partial or failed series.") : "✓ OK"}
                     </p>
-                    <RunSpread
-                      runs={item.runs}
-                      title={t.spread}
-                      failed={t.failed}
-                    />
+                    {pageResults(item).map(page => <div key={page.url}><small>{page.url}</small><RunSpread runs={page.runs} title={t.spread} failed={t.failed} /></div>)}
                     <details>
                       <summary>
                         {t.runDetails}:{" "}
@@ -1889,7 +1836,7 @@ function App() {
                       <button
                         onClick={() =>
                           download(
-                            reportHtml(item, reference),
+                            reportHtml(item, reference && sameComparisonContext(reference, item) ? reference : undefined),
                             `${item.label}.html`,
                             "text/html",
                           )
@@ -1918,6 +1865,7 @@ function App() {
                       })}
                       <button
                         onClick={async () => {
+                          if (!confirm(lang === "pl" ? `Usunąć serię „${item.label}”?` : `Delete series “${item.label}”?`)) return;
                           await db.series.delete(item.id);
                           await reload();
                         }}
@@ -2057,6 +2005,7 @@ function App() {
               <button
                 className="danger"
                 onClick={async () => {
+                  if (!confirm(lang === "pl" ? `Usunąć całą historię (${series.length} serii)?` : `Delete all history (${series.length} series)?`)) return;
                   await db.series.clear();
                   await reload();
                 }}

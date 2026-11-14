@@ -1,5 +1,6 @@
 import type { Artifact, Series } from './types';
 import { strToU8, zipSync } from 'fflate';
+import { pageResults, measurementContextKey, isPartialSeries } from './statistics';
 
 export const historyMetrics = ['totalMs', 'ttfbMs', 'domContentLoadedMs', 'loadMs', 'fcpMs', 'lcpMs', 'cls', 'inpMs', 'transferBytes', 'status'] as const;
 export type HistoryMetric = typeof historyMetrics[number];
@@ -8,13 +9,15 @@ const csv = (rows: string[][]) => rows.map(row => row.map(value => `"${value.rep
 
 /** Exports aggregate values from persistent history, respecting the metric selection. */
 export function historyCsv(series: Series[], metrics: HistoryMetric[]): string {
-  const rows = [['createdAt', 'label', 'kind', 'profile', ...metrics]];
-  for (const item of series) rows.push([item.createdAt, item.label, item.kind, item.profileName, ...metrics.map(metric => String(item.summary?.[metric] ?? ''))]);
-  return csv(rows);
+  return csv(historyRows(series, metrics).map(row => row.map(String)));
+}
+
+function historyRows(series: Series[], metrics: HistoryMetric[]): (string | number)[][] {
+  return [['createdAt', 'label', 'kind', 'profile', 'url', 'engine', 'configuration', 'successfulRuns', 'expectedRuns', ...metrics], ...series.flatMap(item => pageResults(item).map(page => [item.createdAt, item.label, item.kind, item.profileName, page.url, item.profileSnapshot.engine ?? '', JSON.stringify(item.profileSnapshot), page.successful, page.expected, ...metrics.map(metric => page.summary?.[metric] ?? '')]))];
 }
 
 export async function historyXlsx(series: Series[], metrics: HistoryMetric[]): Promise<ArrayBuffer> {
-  const rows = [['createdAt', 'label', 'kind', 'profile', ...metrics], ...series.map(item => [item.createdAt, item.label, item.kind, item.profileName, ...metrics.map(metric => item.summary?.[metric] ?? '')])];
+  const rows = historyRows(series, metrics);
   const column = (index: number) => {
     let value = index + 1; let name = '';
     while (value) { const remainder = (value - 1) % 26; name = String.fromCharCode(65 + remainder) + name; value = Math.floor((value - 1) / 26); }
@@ -36,9 +39,9 @@ export async function historyXlsx(series: Series[], metrics: HistoryMetric[]): P
 }
 
 type ChartMode = 'comparison' | 'trend';
-const orderedHistory = (series: Series[]) => [...series].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-const chartMode = (series: Series[]): ChartMode => series.length <= 2 ? 'comparison' : 'trend';
-const chartLabel = (item: Series, index: number) => `${item.label || `#${index + 1}`}`.slice(0, 16);
+const orderedHistory = (series: Series[]) => series.flatMap(item => pageResults(item).map(page => ({ ...item, label: `${page.url} · ${item.label}`, runs: page.runs, summary: page.summary }))).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+const chartMode = (series: Series[]): ChartMode => series.length <= 2 || new Set(series.map(item => JSON.stringify([measurementContextKey(item), item.runs[0]?.url]))).size > 1 ? 'comparison' : 'trend';
+const chartLabel = (item: Series, index: number) => `${item.label || `#${index + 1}`}`;
 const numericValues = (series: Series[], metric: HistoryMetric) => series.flatMap((item, index) => typeof item.summary?.[metric] === 'number' ? [{ item, index, value: item.summary[metric] as number }] : []);
 
 /** Compact local PDF. A comparison uses bars; 3+ historical series use a chronological trend. */
@@ -80,12 +83,14 @@ export function seriesCsv(series: Series): string {
 }
 
 export function reportHtml(series: Series, reference?: Series): string {
-  const m = series.summary;
-  const rows = Object.entries(m ?? {}).map(([key, value]) => `<tr><th>${key}</th><td>${value}</td><td>${reference?.summary?.[key as keyof typeof reference.summary] ?? '—'}</td></tr>`).join('');
+  // Escape every imported/user-controlled field before it reaches markup.
+  const safe = { label: esc(series.label), profileName: esc(series.profileName), createdAt: esc(series.createdAt), failures: series.thresholdFailures.map(esc) };
+  const partial = isPartialSeries(series);
+  const rows = pageResults(series).map(page => `<tr><th colspan="3">${esc(page.url)} · ${page.successful}/${page.expected}</th></tr>${Object.entries(page.summary ?? {}).map(([key, value]) => `<tr><th>${esc(key)}</th><td>${value}</td><td>${reference ? pageResults(reference).find(before => before.url === page.url)?.summary?.[key as keyof NonNullable<Series['summary']>] ?? '—' : '—'}</td></tr>`).join('')}`).join('');
   const groups = new Map<string, typeof series.runs>();
   for (const run of series.runs.filter(run => run.metrics)) groups.set(run.url, [...(groups.get(run.url) ?? []), run]);
-  const byUrl = [...groups].map(([url, runs]) => `<tr><th>${url}</th><td>${runs.length}</td><td>${runs.map(run => Math.round(run.metrics!.totalMs)).join(', ')}</td></tr>`).join('');
-  return `<!doctype html><meta charset="utf-8"><title>Deploy Speed Tester – ${series.label}</title><style>body{font:15px system-ui;margin:32px;color:#18212f}table{border-collapse:collapse;margin:16px 0}th,td{padding:8px 12px;border:1px solid #d8dee9;text-align:left}.bad{color:#b42318}pre{background:#f4f6f8;padding:12px;overflow:auto}</style><h1>${series.profileName}: ${series.label}</h1><p>${series.createdAt}</p><p class="${series.thresholdFailures.length ? 'bad' : ''}">${series.thresholdFailures.length ? series.thresholdFailures.join('; ') : 'Wszystkie progi spełnione.'}</p><table><thead><tr><th>Metryka</th><th>Seria</th><th>Referencja</th></tr></thead><tbody>${rows}</tbody></table><h2>Runy według URL</h2><table><thead><tr><th>URL</th><th>Udane runy</th><th>Total time (ms)</th></tr></thead><tbody>${byUrl}</tbody></table><h2>Konfiguracja serii</h2><pre>${JSON.stringify(series.profileSnapshot, null, 2).replaceAll('<', '&lt;')}</pre>`;
+  const byUrl = [...groups].map(([url, runs]) => `<tr><th>${esc(url)}</th><td>${runs.length}</td><td>${runs.map(run => Math.round(run.metrics!.totalMs)).join(', ')}</td></tr>`).join('');
+  return `<!doctype html><meta charset="utf-8"><title>Deploy Speed Tester – ${safe.label}</title><style>body{font:15px system-ui;margin:32px;color:#18212f}table{border-collapse:collapse;margin:16px 0}th,td{padding:8px 12px;border:1px solid #d8dee9;text-align:left}.bad{color:#b42318}pre{background:#f4f6f8;padding:12px;overflow:auto}</style><h1>${safe.profileName}: ${safe.label}</h1><p>${safe.createdAt}</p><p class="${safe.failures.length || partial ? 'bad' : ''}">${safe.failures.length ? safe.failures.join('; ') : partial ? 'Seria częściowa lub nieudana.' : 'Wszystkie progi spełnione.'}</p><table><thead><tr><th>Metryka</th><th>Seria</th><th>Referencja</th></tr></thead><tbody>${rows}</tbody></table><h2>Runy według URL</h2><table><thead><tr><th>URL</th><th>Udane runy</th><th>Total time (ms)</th></tr></thead><tbody>${byUrl}</tbody></table><h2>Konfiguracja serii</h2><pre>${esc(JSON.stringify(series.profileSnapshot, null, 2))}</pre>`;
 }
 
 export function download(content: BlobPart, filename: string, type: string): void {
